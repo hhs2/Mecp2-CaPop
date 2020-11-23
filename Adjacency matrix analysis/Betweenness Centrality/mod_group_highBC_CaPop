@@ -1,0 +1,78 @@
+function mod_group_highBC_CaPop(projectdir)
+
+%% Colours
+c1 = [0.027 0.306 0.659]; % dark blue
+c2 = [0.471 0.674 0.188]; % green
+c3 = [0.91 0.41 0.17]; % orange
+c4 = [0.502 0 0.502]; % purple
+c5 = [0 0 0]; % black
+
+cd(projectdir)
+identify = 'CaPopProj'; % Search for all files with CaPopProj in name
+dinfo = dir(fullfile(projectdir,['*' identify '*.mat']));
+filenames = fullfile(projectdir,{dinfo.name});
+num_files = length(filenames);
+
+genotype = zeros(1,num_files);
+BClarge = [];
+BCrest = [];
+BCsecond = [];
+
+for i = 1:num_files
+    load(filenames{i}); % Load files
+    
+    if strcmp(Info.Genotype,'KO')
+        genotype(i) = 1; % 0 if WT, 1 if KO
+    end
+    
+    [~,adjMmod,~,~,CiSort,Ci] = modularity_build_CaPop(Info,BinEvents,coords);
+
+    BC = betweenness_wei(adjMmod);
+    BC = BC/((length(adjMmod)-1)*(length(adjMmod)-2));
+    
+    Cis = Ci(CiSort);
+    
+    BCraw{i} = BC;
+    Cisraw{i} = Cis;
+    
+    for a = 1:numel(unique(Cis))
+        [nodes,~] = find(Cis == a);
+        BCu = BC(nodes);
+        BCu = sort(BCu);
+        BCmax = max(BCu,[],'all');
+        BCu(BCu == BCmax) = [];
+        BCsecondmax = max(BCu,[],'all');
+        BCu(BCu == 0) = [];
+        BClarge = [BClarge BCmax];
+        BCrest = [BCrest BCu'];
+        BCsecond = [BCsecond BCsecondmax'];
+    end
+end
+BCrest = BCrest';
+BClarge = BClarge';
+BCsecond = BCsecond';
+
+BCall = [];
+for i = 1:size(BCraw,2)
+    BCall = [BCall BCraw{i}'];
+end
+BCall = BCall';
+        
+%% Plot        
+xlab = 'General population || Highest BC in each modularity group';
+ylab = 'Betweenness centrality (normalised)';
+titl = 'Comparing highest BC in each mod group to rest of population';
+F1 = meanstest_v2(BCrest,BClarge,c3,c4,xlab,ylab,titl);
+
+xlab = 'All data || Highest BC in each mod group';
+ylab = 'Normalised BC';
+titl = 'Highest BC in each mod group vs all data';
+F2 = meanstest_v2(BCall,BClarge,c3,c4,xlab,ylab,titl);
+
+xlab = 'Second highest BC || Highest BC';
+ylab = 'Normalised BC';
+titl = 'Highst vs second highest BC';
+F3 = meanstest_v2(BCsecond,BClarge,c3,c4,xlab,ylab,titl);
+
+end
+    
