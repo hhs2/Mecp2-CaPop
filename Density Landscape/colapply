@@ -1,0 +1,87 @@
+function [output,colfig,colscale,onefig] = colapply(input,startcol,endcol,figshow,oneshow,whichone,resi)
+% Written by H Smith, Cambridge, 2020
+% For use with heatmapPZ_v3.m
+% Recommend running with oneshow = 0 and figshow = 1 to start to decide
+%   which of the RGB images is best for usage in further analysis
+% 
+% IMPORTANT: onefig IS FLIPPED UPSIDE DOWN SO THAT IT MATCHES THE
+% SCATTERPLOT OF THE DATA BEING CONSIDERED
+%
+% INPUTS:
+%   input = matrix size (:,:,3)
+%   startcol = start colour
+%   endcol = end colour
+%   figshow:
+%       = 1 to display all colours figure
+%   oneshow:
+%       = 1 to display figure for 1 specific color
+%   whichone = 1, 2, 3 corresponding to R, G or B color
+%   resi = scale of image produced. Recommend set 2000
+%
+% OUTPUTS:
+%   output = matrix size (:,:,3) for rgb colour values of each element in
+%       input
+%   colfig = handle of figure
+%   colscale = colour sclaing used to generate figures and output
+
+
+colscale = customcolormap([0 1],[endcol ; startcol],(max(input,[],'all')+1));
+
+output = zeros(size(input,1),size(input,2),3);
+
+[fr,fc] = find(input > 0);
+for i = 1:length(fr)
+    output(fr(i),fc(i),1) = colscale(input(fr(i),fc(i))+1,1);
+    output(fr(i),fc(i),2) = colscale(input(fr(i),fc(i))+1,2);
+    output(fr(i),fc(i),3) = colscale(input(fr(i),fc(i))+1,3);
+end
+
+[cr,cc] = find(input == 0);
+for i = 1:length(cr)
+    output(cr(i),cc(i),1) = colscale(1,1);
+    output(cr(i),cc(i),2) = colscale(1,2);
+    output(cr(i),cc(i),2) = colscale(1,3);
+end
+
+if figshow == 1
+    colfig = figure;
+    sgtitle('Individual RGB Values (INVERTED)')
+    
+    subplot(1,4,1);
+    mat = imresize(output(:,:,1),([resi resi]));
+    imshow(mat)
+    title('Red values')
+    colormap(colscale)
+    colorbar;
+    
+    subplot(1,4,2);
+    mat = imresize(output(:,:,2),([resi resi]));
+    imshow(mat)
+    title('Green values')
+    colormap(colscale)
+    colorbar;
+    
+    subplot(1,4,3);
+    mat = imresize(output(:,:,3),([resi resi]));
+    imshow(mat)
+    title('Blue values')
+    colormap(colscale)
+    colorbar;
+    
+    subplot(1,4,4)
+    mat = imresize(output,([resi resi]));
+    imshow(mat)
+    title('Total')
+    colormap(colscale)
+    colorbar;
+end
+
+if oneshow == 1
+    mat = imresize(output(:,:,whichone),([resi resi]));
+    mat = flipud(mat);
+    onefig = figure;
+    imshow(mat)
+end
+    
+
+end
