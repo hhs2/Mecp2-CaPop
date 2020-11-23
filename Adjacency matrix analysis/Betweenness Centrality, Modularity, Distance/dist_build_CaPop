@@ -1,0 +1,47 @@
+function [distn,ranke] = dist_build_CaPop(adjMmod, coords)
+% H Smith, Cambridge, 2020
+% INPUTS:
+%   adjMmod = adjacency matrix
+%   coords = coordinates of cells in adjacency matrix
+% OUPUTS:
+%   distn = adjacency matrix with element representing straight line
+%       distance between row and column cell
+%   ranke = matrix with each column representing the rank order of distance
+%       (e.g. the first column represents the closest possible distance
+%       and the last column represents the farthest). Elements are the
+%       cells that match that distance given as the absolute element value
+%
+% NOTE:
+%   inbuilt function sub2ind will return the row and column values for the
+%   elements in ranke
+
+    
+% Straight line distance between nodes
+distn = NaN(size(adjMmod));
+for i = 1:length(adjMmod)
+    coordi = coords(:,i);
+    for j = 1:length(adjMmod)
+        if adjMmod(i,j) ~= 0
+            coordj = coords(:,j);
+            dx = (coordj(1) - coordi(1)) ^2; 
+            dy = (coordj(2) - coordi(2)) ^2;
+            dist = sqrt(dx + dy); % Pythagoras
+            distn(i,j) = dist;
+        end
+    end
+end
+
+% Rank 
+distns = triu(distn); % Remove duplication across diagonal
+distns = distns(distns > 0); % Take nonzero values
+unq = unique(sort(distns)); % Sort and remove repeating values 
+unq(isnan(unq)) = [];
+ranke = zeros(length(unq));
+for i = 1:length(unq)
+    [val] = find(distn == unq(i));
+    ranke(1:numel(val),i) = val;
+    clear val
+end
+ranke = ranke(any(ranke,2),:); % Remove additional rows
+
+end
