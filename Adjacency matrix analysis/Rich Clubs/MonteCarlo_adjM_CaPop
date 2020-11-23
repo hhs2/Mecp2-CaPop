@@ -1,0 +1,106 @@
+function sAdj = MonteCarlo_adjM_CaPop(adjM,num_iterations,method)
+% Written by H Smith, Cambridge, 2020
+
+% Code to create random rich club coefficient for use in normalisation of
+% rich club curves.
+
+% Use Monte Carlo switching algorithm on adjacency matrix according to
+% Milo et al (2002) arXiv:cond-mat\0312028v2. Based on code by Chris
+% Lasher https://gist.github.com/gotgenes/2770023. Switching algorithm
+% chosen over go-with-winners as it generates essentially same results
+% while having significantly reduced processing time.
+
+% Reference trail:
+% van den Heuvel and Sporns, 2011
+% >> Rubinov and Sporns, 2010
+% >> Milo et al., 2002
+
+% INPUTS:
+%   adjM: thresholded adjacency matrix (weighted or binary)
+
+%   num_iterations: number of iterations of switching to be weighted by 
+%       number of edges in matrix
+
+%   method: 'manual' = number of iterations number of edges *
+%            num_iterations
+%           'default' = set number of iterations (see code)
+
+% OUTPUTS:
+%   sAdj: scrambled adjacency matrix symmetrical about diagonal
+
+%% 
+% Copy matrix 
+nAdj = triu(adjM);
+
+% Create list of edges 
+[row,col] = find(nAdj);
+edge_list(:,1) = row;
+edge_list(:,2) = col;
+num_edges = size(edge_list,1);
+
+i = 0;
+if strcmp(method,'manual')
+    total_iterations = num_edges * num_iterations;
+elseif strcmp(method,'default')
+    total_iterations = 100;
+end
+
+while i < total_iterations
+    
+    % Generate random numbers and ensure nonzero value selected
+    rand_index = round((rand(1,2) * (num_edges - 1)));
+    if ismember(0,rand_index)
+        continue
+    end
+    
+    original_edge1 = edge_list(rand_index(1),:);
+    original_edge2 = edge_list(rand_index(2),:);
+    
+    % Duplicate 
+    % rand1 = [node1,node2] for a known edge
+    rand1 = original_edge1;
+    rand2 = original_edge2;
+    
+    % Switch 1st values approx 50% time
+    if rand(1) >= 0.5
+        rand1 = flip(rand1);
+    end
+    
+    % Ensure that the same node has not accidentally been selected
+    if rand1(1) == rand2(2) || rand2(1) == rand1(2)
+        continue
+    end
+    
+    % Ensure that an edge does not already exist between the edges to be
+    % swapped
+    if nAdj(rand1(1),rand2(2)) > 0 || nAdj(rand2(1),rand1(2)) > 0
+        continue
+    end
+    
+    % Swap edges 
+    edge_list(rand_index(1),:) = [rand1(1),rand2(2)];
+    edge_list(rand_index(2),:) = [rand2(1),rand1(2)];
+    
+    % Ensure that procedure has been carried out correctly
+    if size(edge_list,1) ~= num_edges
+        error('Error has ocurred')
+    end
+    
+    i = i + 1;
+end
+
+% Create new adjacency matrix
+sAdj = zeros(size(adjM));
+for i = 1:num_edges
+    sAdj(edge_list(i,1),edge_list(i,2)) = nAdj(row(i),col(i));
+end
+
+% Ensure symmetry about diagonal
+sAdj = triu(sAdj);
+for i = 1:length(sAdj)
+    for j = 1:length(sAdj)
+        sAdj(j,i) = sAdj(i,j);
+    end
+end
+
+end
