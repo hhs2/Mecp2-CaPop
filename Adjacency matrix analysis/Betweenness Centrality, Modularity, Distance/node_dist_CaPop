@@ -1,0 +1,396 @@
+function node_dist_CaPop(projectdir)
+% Written by H Smith, Cambridge, 2020
+% Analyse physical distance between nodes
+
+%% Colours
+c1 = [0.027 0.306 0.659]; % dark blue
+c2 = [0.471 0.674 0.188]; % green
+c3 = [0.91 0.41 0.17]; % orange
+c4 = [0.502 0 0.502]; % purple
+c5 = [0 0 0]; % black
+
+%% Find project files
+cd(projectdir)
+identify = 'CaPopProj'; % Search for all files with CaPopProj in name
+dinfo = dir(fullfile(projectdir,['*' identify '*.mat']));
+filenames = fullfile(projectdir,{dinfo.name});
+num_files = length(filenames);
+
+genotype = zeros(1,num_files);
+
+for i = 1:num_files
+    load(filenames{i}); % Load files
+    
+    if strcmp(Info.Genotype,'KO')
+        genotype(i) = 1; % 0 if WT, 1 if KO
+    end
+    
+    [~,adjMmod,coords,~,CiSort,Ci] = modularity_build_CaPop(Info,BinEvents,coords);
+
+    [distn,~] = dist_build_CaPop(adjMmod, coords);
+    
+    % Generate binary matrix of within and between group modularities
+    Ciss = sort(Ci);
+    ModCon = zeros(size(adjMmod));
+    for a = 1:length(adjMmod)
+        for b = 1:length(adjMmod)
+            if Ciss(a) ~= Ciss(b) % 0 is within, 1 is between
+                ModCon(a,b) = 1;
+            end
+        end
+    end
+    
+    AdjAll{i} = adjMmod;
+    ModConBin{i} = ModCon;
+    CiSortGrp{i} = CiSort;
+    DistnGrp{i} = distn;
+    CiRaw{i} = Ci;
+end
+
+%%
+F1 = figure;
+hold on
+
+% Resort order of experiments putting WT first
+wtt = find(genotype == 0);
+koo = find(genotype == 1);
+newgen = [wtt koo];
+
+%% Plot raw data
+subplot(4,1,1)
+colour1 = c4;
+colour2 = c3;
+for i = 1:num_files
+    ModCon = ModConBin{newgen(i)};
+    distn = DistnGrp{newgen(i)};
+    
+    pos = 1+3*(i-1);
+    
+    HalfViolinPlot_Matrix(distn,ModCon,pos,c5,1,colour1,colour2,0);
+end
+xlim([0 (pos+5)])
+set(gca,'xtick',[]);
+a1 = scatter(-50,0,20,c4,'filled');
+a2 = scatter(-50,0,20,c3,'filled');
+leg = {'Within group connections','Between group connections'};
+leg = pad(leg);
+legend([a1 a2],'String',leg,'Location','eastoutside')
+title('Raw data')
+ylabel('Distance between nodes')
+
+subplot(4,1,2)
+for i = 1:num_files
+    ModCon = ModConBin{newgen(i)};
+    distn = DistnGrp{newgen(i)};
+    maxdist = max(distn,[],'all');
+    distn = distn ./ maxdist;
+    
+    pos = 1+3*(i-1);
+    
+    HalfViolinPlot_Matrix(distn,ModCon,pos,c5,1,colour1,colour2,0);
+end
+xlim([0 (pos+5)])
+set(gca,'xtick',[]);
+a1 = scatter(-50,0,20,c4,'filled');
+a2 = scatter(-50,0,20,c3,'filled');
+leg = {'Within group connections','Between group connections'};
+leg = pad(leg);
+legend([a1 a2],'String',leg,'Location','eastoutside')
+title('Normalised to maximum distance')
+ylabel('Distance between nodes')
+
+subplot(4,1,3)
+for i = 1:num_files
+    ModCon = ModConBin{newgen(i)};
+    adjM = AdjAll{newgen(i)};
+    distn = DistnGrp{newgen(i)};
+    distn = distn .* adjM;
+    
+    pos = 1+3*(i-1);
+    
+    HalfViolinPlot_Matrix(distn,ModCon,pos,c5,1,colour1,colour2,0);
+end
+xlim([0 (pos+5)])
+set(gca,'xtick',[]);
+a1 = scatter(-50,0,20,c4,'filled');
+a2 = scatter(-50,0,20,c3,'filled');
+leg = {'Within group connections','Between group connections'};
+leg = pad(leg);
+legend([a1 a2],'String',leg,'Location','eastoutside')
+title('Weighted by strength of connection')
+ylabel('Distance between nodes')
+
+subplot(4,1,4)
+for i = 1:num_files
+    ModCon = ModConBin{newgen(i)};
+    adjM = AdjAll{newgen(i)};
+    distn = DistnGrp{newgen(i)};
+    distn = distn .* adjM;
+    maxdist = max(distn,[],'all');
+    distn = distn ./ maxdist;
+    
+    pos = 1+3*(i-1);
+    
+    HalfViolinPlot_Matrix(distn,ModCon,pos,c5,1,colour1,colour2,0);
+end
+xlim([0 (pos+5)])
+set(gca,'xtick',[]);
+a1 = scatter(-50,0,20,c4,'filled');
+a2 = scatter(-50,0,20,c3,'filled');
+leg = {'Within group connections','Between group connections'};
+leg = pad(leg);
+legend([a1 a2],'String',leg,'Location','eastoutside')
+title('Normalised weighted values')
+ylabel('Distance between nodes')
+
+%% Compare WT to KO
+WTb = []; % between group wild type
+KOb = []; % between gorup knockout
+WTw = []; % within group wild type
+KOw = []; % within group knockout
+
+nWTb = [];
+nKOb = [];
+nWTw = [];
+nKOw = [];
+
+WTallw = [];
+KOallw = [];
+
+for i = 1:num_files
+    ModCon = ModConBin{newgen(i)};
+    distn = DistnGrp{newgen(i)};
+    
+    adjM = AdjAll{newgen(i)};
+    
+    if genotype(newgen(i)) == 0 % Wild type
+        b = distn .* ModCon; % raw between
+        b = b(:);
+        b(isnan(b)) = [];
+        b(b == 0) = [];
+        WTb = [WTb' b'];
+        WTb = WTb(:);
+        
+        nb = distn .* ModCon .* adjM; % weight between
+        nb = nb(:);
+        nb(isnan(nb)) = [];
+        nb(nb == 0) = [];
+        nWTb = [nWTb' nb'];
+        nWTb = nWTb(:);
+        
+        w = distn .* ~ModCon; % raw within
+        w = w(:);
+        w(isnan(w)) = [];
+        w(w == 0) = [];
+        WTw = [WTw' w'];
+        WTw = WTw(:);
+        
+        nw = distn .* ~ModCon .* adjM; % weight within
+        nw = nw(:);
+        nw(isnan(nw)) = [];
+        nw(nw == 0) = [];
+        nWTw = [nWTw' nw'];
+        nWTw = nWTw(:);
+        
+        WTallw = [WTallw' nb' nw'];
+        WTallw = WTallw(:);
+        
+    elseif genotype(newgen(i)) == 1 % Knockout
+        b = ModCon .* distn; % raw between
+        b = b(:);
+        b(isnan(b)) = [];
+        b(b == 0) = [];
+        KOb = [KOb' b'];
+        KOb = KOb(:);
+        
+        nb = distn .* ModCon .* adjM; % weight between
+        nb = nb(:);
+        nb(isnan(nb)) = [];
+        nb(nb == 0) = [];
+        nKOb = [nKOb' nb'];
+        nKOb = nKOb(:);
+        
+        w = distn .* ~ModCon; % raw within
+        w = w(:);
+        w(isnan(w)) = [];
+        w(w == 0) = [];
+        KOw = [KOw' w'];
+        KOw = KOw(:);
+        
+        nw = distn .* ~ModCon .* adjM; % weight within
+        nw = nw(:);
+        nw(isnan(nw)) = [];
+        nw(nw == 0) = [];
+        nKOw = [nKOw' nw'];
+        nKOw = nKOw(:);
+        
+        KOallw = [KOallw' nb' nw'];
+        KOallw = KOallw(:);
+        
+    end
+end
+
+% Normalise
+n2WTb = nWTb ./ max(WTallw,[],'all');
+n2WTw = nWTw ./ max(WTallw,[],'all');
+n2KOb = nKOb ./ max(KOallw,[],'all');
+n2KOw = nKOw ./ max(KOallw,[],'all');
+
+%% Plot
+F2 = figure;
+
+subplot(3,1,1)
+vall = {'WTb','KOb','WTw','KOw'};
+colorr = {'[0.471 0.674 0.188]','[0.027 0.306 0.659]','[0.471 0.674 0.188]','[0.027 0.306 0.659]'};
+for i = 1:4
+    pos = 1+3*(i-1);
+    eval(['HalfViolinPlot(' vall{i} ',pos,' colorr{i} ',1)'])
+end
+title('Raw data')
+xlim([0 (pos+2)])
+set(gca,'xtick',[]);
+ylabel('Distance between nodes')
+xlabel('Between || Between || Within || Within')
+a1 = scatter(-50,0,20,[0.471 0.674 0.188],'filled');
+a2 = scatter(-50,0,20,[0.027 0.306 0.659],'filled');
+leg = {'Wild type','Knockout'};
+leg = pad(leg);
+legend([a1 a2],'String',leg,'Location','eastoutside')
+
+subplot(3,1,2)
+vall = {'nWTb','nKOb','nWTw','nKOw'};
+colorr = {'[0.471 0.674 0.188]','[0.027 0.306 0.659]','[0.471 0.674 0.188]','[0.027 0.306 0.659]'};
+for i = 1:4
+    pos = 1+3*(i-1);
+    eval(['HalfViolinPlot(' vall{i} ',pos,' colorr{i} ',1)'])
+end
+title('Weighted')
+xlim([0 (pos+2)])
+set(gca,'xtick',[]);
+ylabel('Distance between nodes')
+xlabel('Between || Between || Within || Within')
+a1 = scatter(-50,0,20,[0.471 0.674 0.188],'filled');
+a2 = scatter(-50,0,20,[0.027 0.306 0.659],'filled');
+leg = {'Wild type','Knockout'};
+leg = pad(leg);
+legend([a1 a2],'String',leg,'Location','eastoutside')
+
+subplot(3,1,3)
+vall = {'n2WTb','n2KOb','n2WTw','n2KOw'};
+colorr = {'[0.471 0.674 0.188]','[0.027 0.306 0.659]','[0.471 0.674 0.188]','[0.027 0.306 0.659]'};
+for i = 1:4
+    pos = 1+3*(i-1);
+    eval(['HalfViolinPlot(' vall{i} ',pos,' colorr{i} ',1)'])
+end
+title('Weighted and normalised')
+xlim([0 (pos+2)])
+set(gca,'xtick',[]);
+ylabel('Distance between nodes')
+xlabel('Between || Between || Within || Within')
+a1 = scatter(-50,0,20,[0.471 0.674 0.188],'filled');
+a2 = scatter(-50,0,20,[0.027 0.306 0.659],'filled');
+leg = {'Wild type','Knockout'};
+leg = pad(leg);
+legend([a1 a2],'String',leg,'Location','eastoutside')
+
+%% Statstest            
+F3 = figure('units','normalized','outerposition',[0 0 1 1]);
+hold on
+sgtitle('Are means significantly different?')
+
+subplot(4,3,1)
+meanstest(nWTb,nWTw,c3,c4,'Between || Within','Distance between nodes','Wild type','datashow')
+subplot(4,3,2)
+meanstest(nWTb,nWTw,c3,c4,'Between || Within','Distance between nodes','Wild type','meanshow')
+subplot(4,3,3)
+meanstest(nWTb,nWTw,c3,c4,'Between || Within','Distance between nodes','Wild type','statshow')
+
+subplot(4,3,4)
+meanstest(nKOb,nKOw,c3,c4,'Between || Within','Distance between nodes','Knockout','datashow')
+subplot(4,3,5)
+meanstest(nKOb,nKOw,c3,c4,'Between || Within','Distance between nodes','Knockout','meanshow')
+subplot(4,3,6)
+meanstest(nKOb,nKOw,c3,c4,'Between || Within','Distance between nodes','Knockout','statshow')
+
+subplot(4,3,7)
+meanstest(nWTb,nKOb,c2,c1,'WT || KO','Distance between nodes','Between group connections','datashow')
+subplot(4,3,8)
+meanstest(nWTb,nKOb,c2,c1,'WT || KO','Distance between nodes','Between group connections','meanshow')
+subplot(4,3,9)
+meanstest(nWTb,nKOb,c2,c1,'WT || KO','Distance between nodes','Between group connections','statshow')
+
+subplot(4,3,10)
+meanstest(nWTw,nKOw,c2,c1,'WT || KO','Distance between nodes','Within group connections','datashow')
+subplot(4,3,11)
+meanstest(nWTw,nKOw,c2,c1,'WT || KO','Distance between nodes','Within group connections','meanshow')
+subplot(4,3,12)
+meanstest(nWTw,nKOw,c2,c1,'WT || KO','Distance between nodes','Within group connections','statshow')
+
+%% Cutoff data
+% SD
+F4 = figure('units','normalized','outerposition',[0 0 1 1]);
+hold on
+sgtitle('Are values > 2 standard deviations significantly different?')
+
+subplot(4,3,1)
+meanstest_cutoff(nWTb,nWTw,c3,c4,'Between || Within','Distance between nodes','Wild type','datashow','SD')
+subplot(4,3,2)
+meanstest_cutoff(nWTb,nWTw,c3,c4,'Between || Within','Distance between nodes','Wild type','meanshow','SD')
+subplot(4,3,3)
+meanstest_cutoff(nWTb,nWTw,c3,c4,'Between || Within','Distance between nodes','Wild type','statshow','SD')
+
+subplot(4,3,4)
+meanstest_cutoff(nKOb,nKOw,c3,c4,'Between || Within','Distance between nodes','Knockout','datashow','SD')
+subplot(4,3,5)
+meanstest_cutoff(nKOb,nKOw,c3,c4,'Between || Within','Distance between nodes','Knockout','meanshow','SD')
+subplot(4,3,6)
+meanstest_cutoff(nKOb,nKOw,c3,c4,'Between || Within','Distance between nodes','Knockout','statshow','SD')
+
+subplot(4,3,7)
+meanstest_cutoff(nWTb,nKOb,c2,c1,'WT || KO','Distance between nodes','Between group connections','datashow','SD')
+subplot(4,3,8)
+meanstest_cutoff(nWTb,nKOb,c2,c1,'WT || KO','Distance between nodes','Between group connections','meanshow','SD')
+subplot(4,3,9)
+meanstest_cutoff(nWTb,nKOb,c2,c1,'WT || KO','Distance between nodes','Between group connections','statshow','SD')
+
+subplot(4,3,10)
+meanstest_cutoff(nWTw,nKOw,c2,c1,'WT || KO','Distance between nodes','Within group connections','datashow','SD')
+subplot(4,3,11)
+meanstest_cutoff(nWTw,nKOw,c2,c1,'WT || KO','Distance between nodes','Within group connections','meanshow','SD')
+subplot(4,3,12)
+meanstest_cutoff(nWTw,nKOw,c2,c1,'WT || KO','Distance between nodes','Within group connections','statshow','SD')
+
+% 95 CI
+F5 = figure('units','normalized','outerposition',[0 0 1 1]);
+hold on
+sgtitle('Are values > 95th percentile significantly different?')
+
+subplot(4,3,1)
+meanstest_cutoff(nWTb,nWTw,c3,c4,'Between || Within','Distance between nodes','Wild type','datashow','95')
+subplot(4,3,2)
+meanstest_cutoff(nWTb,nWTw,c3,c4,'Between || Within','Distance between nodes','Wild type','meanshow','95')
+subplot(4,3,3)
+meanstest_cutoff(nWTb,nWTw,c3,c4,'Between || Within','Distance between nodes','Wild type','statshow','95')
+
+subplot(4,3,4)
+meanstest_cutoff(nKOb,nKOw,c3,c4,'Between || Within','Distance between nodes','Knockout','datashow','95')
+subplot(4,3,5)
+meanstest_cutoff(nKOb,nKOw,c3,c4,'Between || Within','Distance between nodes','Knockout','meanshow','95')
+subplot(4,3,6)
+meanstest_cutoff(nKOb,nKOw,c3,c4,'Between || Within','Distance between nodes','Knockout','statshow','95')
+
+subplot(4,3,7)
+meanstest_cutoff(nWTb,nKOb,c2,c1,'WT || KO','Distance between nodes','Between group connections','datashow','95')
+subplot(4,3,8)
+meanstest_cutoff(nWTb,nKOb,c2,c1,'WT || KO','Distance between nodes','Between group connections','meanshow','95')
+subplot(4,3,9)
+meanstest_cutoff(nWTb,nKOb,c2,c1,'WT || KO','Distance between nodes','Between group connections','statshow','95')
+
+subplot(4,3,10)
+meanstest_cutoff(nWTw,nKOw,c2,c1,'WT || KO','Distance between nodes','Within group connections','datashow','95')
+subplot(4,3,11)
+meanstest_cutoff(nWTw,nKOw,c2,c1,'WT || KO','Distance between nodes','Within group connections','meanshow','95')
+subplot(4,3,12)
+meanstest_cutoff(nWTw,nKOw,c2,c1,'WT || KO','Distance between nodes','Within group connections','statshow','95')
+
+end
