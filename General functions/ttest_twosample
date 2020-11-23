@@ -1,0 +1,101 @@
+function [meandif,type] = ttest_twosample(dataset1,dataset2,pval)
+% Written by H Smith, Cambridge, November 2020
+
+% This function computes using sample variance and standard deviation
+% rather than population variance and standard deviation. i.e. degrees of
+% freedom = n-1. Output may be different from normal coputer value if
+% pooled variances not assumed as a simplified calculation for df is used.
+
+% INPUTS:
+%   dataset1, dataset2 = vectors or matrices containing data
+%   pval = significance value to test at
+
+% OUTPUTS:
+%   meandif = test if means of data are different under H0: means are not
+%   different. Applies two tailed P = 0.05 test. Returns 0 if H0 not
+%   rejected, 1 if H0 is rejected and H1: means are significantly different
+%   is taken
+
+% type: 0 if variances equal, 1 if they are not
+
+a = dataset1(:);
+b = dataset2(:);
+
+% Mean
+x1 = mean(a,'all');
+x2 = mean(b,'all');
+
+% Degrees freedom
+df1 = numel(a) - 1;
+df2 = numel(b) - 1;
+
+% Sample variance
+asq = zeros(1,length(a));
+for i = 1:length(a)
+    asq(1,i) = a(i) ^ 2;
+end
+var1 = (sum(asq,'all') - ((sum(a,'all') ^ 2) / length(a))) / df1;
+
+bsq = zeros(1,length(b));
+for i = 1:length(b)
+    bsq(1,i) = b(i) ^ 2;
+end
+var2 = (sum(bsq,'all') - ((sum(b,'all') ^ 2) / length(b))) / df2;
+
+% Sample standard deviation
+std1 = sqrt(var1);
+std2 = sqrt(var2);
+
+% Standard error of the difference
+% Cannot assume pooled variances if std or sample sizes are more than 2x
+%   each other
+if std1/std2 > 2 || std2/std1 > 2 || numel(a)/numel(b) > 2 || numel(b)/numel(a) > 2
+    f1 = var1 / numel(a);
+    f2 = var2 / numel(b);
+    SEdsq = f1 + f2;
+    SEd = sqrt(SEdsq);
+    
+    type = 1;
+else
+    numerator = (df1 * var1) + (df2 * var2);
+    denominator = numel(a) + numel(b) - 2;
+    adjust = (1/numel(a)) + (1/numel(b));
+    SEdsq = (numerator / denominator) * adjust;
+    SEd = sqrt(SEdsq);
+    
+    type = 0;
+end
+
+% type 0 = pooled variance assumed
+% type 1 = pooled variance cannot be assumed
+
+% degrees freedom for t test 
+if type == 0
+    df = numel(a) + numel(b) - 2;
+elseif type == 1
+    if numel(a) > numel(b)
+        df = numel(a) - 1;
+    else
+        df = numel(b) - 1;
+    end
+end
+
+% t critical
+t = (x1 - x2) / SEd;
+
+% Critical values 
+p = pval / 2; % two-tailed test
+ts = tinv([p (1-p)], df);
+if abs(t) > ts(2)
+    meandif = 1;
+else
+    meandif = 0;
+end
+
+% Confidence interval
+% CI = zeros(1,2);
+% CI(1) = x1 - x2 + (t * SEd);
+% CI(2) = x1 - x2 - (t * SEd);
+% CI = sort(CI);
+
+end
