@@ -1,0 +1,144 @@
+function F1 = meanstest_v2(data1,data2,colour1,colour2,xlab,ylab,titl)
+% Written by H Smith, Cambridge, 2020
+%
+% Unpaired two sample testing for comparison of means
+% Analysis:
+%   1. Test normality
+%       For datasets <= 5000 data points, use Shapiro-Wilk / Shapiro-Francia
+%       For datasets > 5000 data points, use Kolmogorov-Smirnov with
+%       Lilliefors correction
+%   2. If data are normal, use a t-test
+%       (a) Test manually with an attached function
+%       (b) Test automatically with inbuilt ttest2 function
+%   3. If data are not normal, use nonparametric Mann Whitney U test
+%       (Wilcoxon procedure)
+%
+%   H0: there is no difference between the means
+%   H1: there is a difference between the means
+%
+% INPUTS: 
+%   data1, data2 = vector or matrix of data points 
+%   colour1, colour2 = colors to apply to dataset
+%   xlab, ylab = x label and y label for subplot 1 and 2
+%   titl = title for subplot 1
+
+data1 = data1(:);
+data2 = data2(:);
+
+F1 = figure;
+sgtitle('Comparison of means')
+hold on
+
+subplot(1,3,1)
+    for i = 1:2
+        pos = 1+3*(i-1);
+        eval(['HalfViolinPlot(data' num2str(i) ',pos,colour' num2str(i) ',1)'])
+    end
+    title(titl)
+    xlim([0 (pos+2)])
+    set(gca,'xtick',[]);
+    ylabel(ylab)
+    xlabel(xlab)
+
+subplot(1,3,2)
+    y(1) = mean(data1,'all');
+    y(2) = mean(data2,'all');
+    for i = 1:2
+        h = bar(i,y(i));
+        hold on
+        eval([convertStringsToChars("set(h,'FaceColor',colour") num2str(i) ')'])
+    end
+    title('Means')
+    ylabel(ylab)
+    set(gca,'xtick',[]);
+
+subplot(1,3,3)
+        
+    if numel(data1) <= 5000
+        [H1, pValue1, ~] = swtest(data1, 0.05);
+    elseif numel(data1) > 5000
+        [H1, pValue1] = lillietest(data1,'Alpha',0.05);
+    end
+    if numel(data2) <= 5000
+        [H2, pValue2, ~] = swtest(data2, 0.05);
+    elseif numel(data1) > 5000
+        [H1, pValue1] = kstest(data2,'Alpha',0.05);
+    end
+
+    if H1 + H2 == 2
+        cell2show{1,1} = {['Both datasets are non-normal at p = ' num2str(pValue1) ', ' num2str(pValue2)]};
+    elseif H1 == 1 && H2 == 0
+        cell2show{1,1} = {['Dataset 1 is non-normal at p = ' num2str(pValue1)]};
+    elseif H1 == 0 && H2 == 1
+        cell2show{1,1} = {['Dataset 2 is non-normal at p = ' num2str(pValue2)]};
+    else
+        cell2show{1,1} = {['Both datasets are normal at p = ' num2str(pValue1) ', ' num2str(pValue2)]};
+    end
+
+    if H1 + H2 == 0
+        coldo = 0;
+        [meandif,type] = ttest_twosample(data1,data2,0.05);
+        if type == 1
+            vartype = 'unequal';
+        else
+            vartype = 'equal';
+        end
+        [h,p,ci,stats] = ttest2(data1,data2,'Vartype',vartype);
+
+        if meandif == 1
+            cell2show{2,1} = {'My ttest result: reject H0 at p = 0.05'};
+        elseif meandif == 0
+            cell2show{2,1} = {'My ttest result: cannot reject H0 at p = 0.05'};
+        end
+
+        if h == 1
+            cell2show{3,1} = {['MATLAB ttest: reject H0 at p = ' num2str(p)]};
+        elseif h == 0
+            cell2show{3,1} = {['MATLAB ttest: cannot reject H0 at p = ' num2str(p)]};
+        end
+
+        try
+            cell2show{4,1} = {['MATLAB ttest standard deviation = ' num2str(stats.sd)]};
+        catch
+            cell2show{4,1} = {['Matlab ttest sd (unpooled variance) = ' num2str(stats.sd(1)) ', ' num2str(stats.sd(2))]};
+        end
+
+        cell2show{5,1} = {['MATLAB ttest degrees freedom = ' num2str(stats.df)]};
+        cell2show{6,1} = {['MATLAB ttest CI = ' num2str(ci(1)) ' : ' num2str(ci(2))]};
+
+    elseif H1 + H2 > 0
+        coldo = 1;
+        [p,h,~] = ranksum(data1,data2);
+        cell2show{2,1} = {['MATLAB Wilcoxon rank sum (MWU) test:']};
+        if h == 1
+            cell2show{3,1} = {['Reject H0 at p = ' num2str(p)]};
+        elseif h == 0
+            cell2show{3,1} = {['Cannot reject H0 at p = ' num2str(p)]};
+        end
+    end
+
+    for i = 1:size(cell2show,1)
+        a = text(0,((size(cell2show,1)-i) * 1),cell2show{i,1},'Color','k','FontSize',10);
+        if coldo == 0
+            if i == 2 && meandif == 1
+                a.Color = [0, 0.5, 0];
+            elseif i == 2 && meandif == 0
+                a.Color = 'r';
+            end
+            if i == 3 && h == 1
+                a.Color = [0, 0.5, 0];
+            elseif i == 3 && h == 0
+                a.Color = 'r';
+            end
+        elseif coldo == 1
+            if i == 3 && h == 1
+                a.Color = [0, 0.5, 0];
+            elseif i == 3 && h == 0
+                a.Color = 'r';
+            end
+        end
+    end
+    ylim([-0.05 (i + 0.1)])
+    xlim([-0.05 50])
+    set(gca,'Visible','off')
+end
