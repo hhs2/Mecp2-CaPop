@@ -1,0 +1,268 @@
+function RichClub = rich_club_CaPop_v2(projectdir,saven,num_iterations,cutoff,tail)
+% Written by H Smith, Cambridge, 2020
+
+% Code to generate rich club curves for calcium imaging data. Based on van
+% den Heuvel and Sporns, J Neurosci, 2011. Normalise rich club curves using
+% Monte Carlo sorting algorithm (see function Monte_Carlo_adjM_CaPop for
+% further detail)
+
+% INPUTS:
+%   projectdir: pwd for data storage
+
+%   saven: 'yes' to save variables and figures, 'no' otherwise
+
+%   num_iterations: set to any value if 'default' method selected on
+%       Monte_Carlo_adjM_CaPop. Otherwise set to ensure that
+%       total_iterations in that function ~100 or not too large to
+%       significiantly increase processing time
+
+%   cutoff: minimum value of rich club coefficient for second figure.
+%       Currently no recommended default but try ~1.05 if unsure where to
+%       start
+
+% OUTPUTS:
+%   RichClub: structure containing (1) Rw = non-normal rich club data (2)
+%       RwNorm = normalised rich club data (3) RwSig = below significance
+%       values removed from RwNorm (4) RwThresh = Below 95% threshold
+%       values removed from RwNorm (5) Type = WT or Mecp2 KO
+
+
+% Identify all project files
+cd(projectdir)
+identify = 'CaPopProj'; % Search for all files with CaPopProj in name
+dinfo = dir(fullfile(projectdir,['*' identify '*.mat']));
+filenames = fullfile(projectdir,{dinfo.name});
+num_files = length(filenames);
+
+
+%% Analyse data
+for i = 1:num_files
+    
+    load(filenames{i});
+    
+    % Adjacency matrix
+    fs = str2double(Info.FrRate)/1000;
+    method = 'tileCoef';
+    downSample = 0;
+    lag = 1;
+    adjM = getAdjM_CaPop(BinEvents, method, downSample, fs, lag);
+    adjM(adjM<0) = 0;
+    adjM(isnan(adjM)) = 0;
+    adjM = adjM .* ~eye(size(adjM));
+    
+    % Rich club coefficient 
+    [Rw,RN] = rich_club_nodefind(adjM);
+    
+    % Generate randomised datasets 
+    counter = 1;
+    while counter < 1001
+        sAdj = MonteCarlo_adjM_CaPop(adjM,num_iterations,'default');
+        [RwsAdj,~] = rich_club_nodefind(sAdj);
+        RichNorm{counter} = RwsAdj;
+        counter = counter + 1;
+    end 
+    
+    % Find average rich club coefficient
+    for v = 1:length(Rw)
+        summa = 0;
+        numuse = 0;
+        for b = 1:length(RichNorm)
+            try
+                if isnan(RichNorm{b}(v))
+                    continue
+                end
+                summa = RichNorm{b}(v) + summa;
+                numuse = numuse + 1; % Number of elements counted
+            catch
+                continue
+            end
+        end
+        avRichNorm(v) = summa / numuse;
+    end
+    
+    % Normalise data
+    for v = 1:length(Rw)
+        RwNorm(v) = Rw(v) / avRichNorm(v);
+    end
+    
+    % Significance test 
+    sigval = zeros(1,length(Rw));
+    threshval = zeros(1,length(Rw));
+    for v = 1:length(Rw)
+        % Extract all random data rich club coeff values 
+        for b = 1:length(RichNorm)
+            try
+                RNSep(b) = RichNorm{b}(v);
+            catch
+                continue
+            end
+        end
+        RNSep(isnan(RNSep)) = [];
+        
+        % 95% CI testing 
+        if ~isempty(RNSep)
+            RNSep = sort(RNSep,'ascend');
+            CI = RNSep(ceil(0.95 * length(RNSep)));
+            if CI < RwNorm(v)
+                threshval(v) = 1;
+            end
+        end
+        
+        % t test skipping non normal data
+        try
+            [H, ~, ~] = swtest(RNSep); % check that data is normally distributed
+        catch
+            continue
+        end
+        if H == 1 
+            continue % Skip if not normally distributed 
+        else
+            df = length(RNSep) - 1; % degrees of freedom = n - 1
+            sd = std(RNSep,1); % standard deviation normalised by n-1
+            se = sd / sqrt(length(RNSep)); % standard error 
+            mn = mean(RNSep,'all'); % Mean
+            if strcmp(tail,'two') % two-tailed t test
+                ts = tinv([0.025 0.975], df);
+                ts(1) = [];
+            elseif strcmp(tail,'one') % one-tailed t test 
+                ts = tinv([0 0.95], df);
+                ts(1) = [];
+            end
+            CI = mn + (ts * se);
+            if RwNorm(v) > CI
+                sigval(v) = 1;
+            end
+        end
+        clear RNSep
+    end
+    
+    RwSig = RwNorm .* sigval;
+    RwThresh = RwNorm .* threshval; 
+    
+    RichClub(i).Rw = Rw;
+    RichClub(i).RwNorm = RwNorm;
+    RichClub(i).RwSig = RwSig;
+    RichClub(i).RwThresh = RwThresh;
+    RichClub(i).Type = Info.Genotype;
+    
+    if strcmp(saven,'yes')
+        if ~exist([dinfo(i).name(1:end-4) '_SavedData'],'dir')
+            mkdir([dinfo(i).name(1:end-4) '_SavedData'])
+        end
+        cd([dinfo(i).name(1:end-4) '_SavedData'])
+        if exist(['AnalysisData_' dinfo(i).name(1:end-4) '.mat'],'file')
+            save(['AnalysisData_' dinfo(i).name(1:end-4)],'Rw','-append')
+            save(['AnalysisData_' dinfo(i).name(1:end-4)],'RwNorm','-append')
+            save(['AnalysisData_' dinfo(i).name(1:end-4)],'RN','-append')
+        else
+            saveas(RwN,'RwN',['AnalysisData_' dinfo(i).name(1:end-4)])
+            save(['AnalysisData_' dinfo(i).name(1:end-4)],'RwNorm','-append')
+            save(['AnalysisData_' dinfo(i).name(1:end-4)],'RN','-append')
+        end
+    end
+    
+    clear Rw RwNorm avRichNorm RN sAdj RwsAdj RichNorm RwSig
+    
+    cd(projectdir)
+end
+
+%% Generate figures
+F1 = figure;
+hold on
+
+subplot(2,2,1)
+for i = 1:size(RichClub,2)
+    if strcmp(RichClub(i).Type,'WT')
+        plot(RichClub(i).RwNorm,'b')
+        hold on
+    elseif strcmp(RichClub(i).Type,'KO')
+        plot(RichClub(i).RwNorm,'k')
+        hold on
+    end
+end
+plot([0 70], [cutoff cutoff],'r','LineWidth',2)
+[~,objh] = legend('WT','KO');
+objh(3).Color = 'b';
+objh(5).Color = 'k';
+xlabel('Range of degree, k')
+ylabel('Rich-club coefficient')
+title('Comparison across datasets')
+
+subplot(2,2,2)
+hold on
+for i = 1:size(RichClub,2)
+    [coll] = find(RichClub(i).RwNorm > cutoff);
+    if strcmp(RichClub(i).Type,'WT')
+        scatter(coll,RichClub(i).RwNorm(coll),'b','filled')
+        hold on
+    elseif strcmp(RichClub(i).Type,'KO')
+        scatter(coll,RichClub(i).RwNorm(coll),'k','filled')
+    end
+    clear coll
+end
+xlabel('Range of degree, k')
+ylabel('Rich-Club coefficient')
+title('Values > cutoff')
+[~,objh2] = legend('WT','KO');
+objh2(3).Children.MarkerEdgeColor = 'b';
+objh2(3).Children.MarkerFaceColor = 'b';
+objh2(4).Children.MarkerEdgeColor = 'k';
+objh2(4).Children.MarkerFaceColor = 'k';
+
+subplot(2,2,3)
+hold on
+for i = 1:size(RichClub,2)
+    [coll] = find(RichClub(i).RwSig > 0);
+    if strcmp(RichClub(i).Type,'WT')
+        scatter(coll,RichClub(i).RwSig(coll),'b','filled')
+        hold on
+    elseif strcmp(RichClub(i).Type,'KO')
+        scatter(coll,RichClub(i).RwSig(coll),'k','filled')
+    end
+    clear coll
+end
+xlabel('Range of degree, k')
+ylabel('Rich-Club coefficient')
+title('Values w/ significance > random data')
+[~,objh3] = legend('WT','KO');
+objh3(3).Children.MarkerEdgeColor = 'b';
+objh3(3).Children.MarkerFaceColor = 'b';
+objh3(4).Children.MarkerEdgeColor = 'k';
+objh3(4).Children.MarkerFaceColor = 'k';
+
+subplot(2,2,4)
+hold on
+for i = 1:size(RichClub,2)
+    [coll] = find(RichClub(i).RwThresh > 0);
+    if strcmp(RichClub(i).Type,'WT')
+        scatter(coll,RichClub(i).RwThresh(coll),'b','filled')
+        hold on
+    elseif strcmp(RichClub(i).Type,'KO')
+        scatter(coll,RichClub(i).RwThresh(coll),'k','filled')
+    end
+    clear coll
+end
+xlabel('Range of degree, k')
+ylabel('Rich-Club coefficient')
+title('Values > 95% scrambled data')
+[~,objh3] = legend('WT','KO');
+objh3(3).Children.MarkerEdgeColor = 'b';
+objh3(3).Children.MarkerFaceColor = 'b';
+objh3(4).Children.MarkerEdgeColor = 'k';
+objh3(4).Children.MarkerFaceColor = 'k';
+
+for i = 2:2:8
+    F1.Children(i).XLim = [0 70];
+end
+
+if strcmp(saven,'yes')
+    if ~exist('Rich Club Analysis','dir')
+        mkdir('Rich Club Analysis')
+    end
+    cd('Rich Club Analysis')
+    saveas(F1,'RC_Coeff_AllData.fig');
+end
+
+cd(projectdir)
+
+end
