@@ -1,0 +1,56 @@
+function [output,matfig] = matsmooth_v3(inputAdj,framelen,iterations,figshow)
+% Written by H Smith, Cambridge, 2020
+% Use moving mean to smooth matrix along horizontal and vertical axes
+
+% INPUTS:
+%   inputAdj = input matrix
+%   framelen = number of frames to take moving mean
+%   iterations = number of repeats to smooth data
+%   figshow:
+%       1 = display original and smooothed data
+
+% OUTPUTS:
+%   output = smoothed adjacency matrix
+%   matfig = handle of figure 
+
+
+output = inputAdj;
+num_iterations = 0;
+
+if size(output,1) < size(output,2)
+    colsmooth = framelen * round(size(output,2)/size(output,1));
+    rowsmooth = framelen;
+elseif size(output,1) > size(output,2)
+    colsmooth = framelen;
+    rowsmooth = framelen * round(size(output,1)/size(output,2));
+else
+    colsmooth = framelen;
+    rowsmooth = framelen;
+end
+    
+while num_iterations < iterations
+    
+    for i = 1:size(output,1)
+        output(i,:) = movmean(output(i,:),rowsmooth);
+    end
+    for i = 1:size(output,2)
+        output(:,i) = movmean(output(:,i),colsmooth);
+    end
+    
+    num_iterations = num_iterations + 1;
+    
+end
+
+if figshow == 1
+    matfig = figure;
+    subplot(1,2,1)
+    imagesc(inputAdj)
+    title('Input data')
+    ylabel('Note reversed direction')
+    subplot(1,2,2)
+    imagesc(output)
+    title('Output data')
+    ylabel('Note reversed direction')
+end
+
+end
