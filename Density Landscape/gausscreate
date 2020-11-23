@@ -1,0 +1,47 @@
+function [xvec,gaussvec] = gausscreate(lengthvec)
+% Written by H Smith, Cambridge, 2020
+
+% Create gaussian distribution mean 0 that falls away to close to 0 at 
+% specified width. Iterates through to find best standard deviation to 
+% apply
+
+% INPUTS:
+%   lengthvec = specified length of gaussian (width = 1/2 * lengthvec)
+
+% OUTPUTS:
+%   xvec = x axis (plot(xvec,gaussvec) will show gaussian created)
+%   gaussvec = y axis (gaussian values)
+
+% NOTE:
+%   Tested on lengthvec < 1000. Code will run 10^6 times below start s.d.
+%   of 0.2 however after this number of iterations it will then iterate
+%   positively without stopping. Code will warn if this does. Future
+%   improvement to solve this necessary
+
+x = linspace(-1,1,lengthvec);
+y = gaussmf(x,[0.2 0]);
+numiterations = 0;
+
+startsig = 0.2;
+
+while y(1) > 1e-5
+    if numiterations < 1000000
+        startsig = startsig - 0.0001;
+        y = gaussmf(x,[startsig 0]);
+        numiterations = numiterations + 1;
+    else
+        startsig = startsig + 0.001;
+        y = gaussmf(x,[startsig 0]);
+        numiterations = numiterations + 1;
+    end
+    
+    if numiterations > 1000000
+        warning('gausscreate running at > 10^6 iterations. Recommend stopping and changing inputs');
+    end
+    
+end
+
+xvec = x;
+gaussvec = y;
+
+end
