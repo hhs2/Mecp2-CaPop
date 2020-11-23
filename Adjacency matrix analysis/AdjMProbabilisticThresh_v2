@@ -1,0 +1,199 @@
+function [adjMci,CIall] = AdjMProbabilisticThresh_v2(events,adjM,repNum,randMethod,adjMmethod,downSample,lag,fs,tail)
+
+% Updated by HSmith, Cambridge, November 2020
+% Author RCFeord
+%
+% This function generates a synthetic matrix of binary data
+%
+% Synthetic data is created using original data and shuffling events for
+% each cell using one of two methods: 'shuffle' or 'circular'. All
+% synthetic data is created from existing events
+%
+% It then averages the functional connectivity established across n number
+% of iterated synthetic matrices
+%
+% INPUTS:
+%   events = binary matrix of spikes/neuronal events, columns are nodes/cells,
+%            rows correspond to time points
+%   adjM = adjacency matrix of real data
+%   repNum = number of repetitions for the generation of synthetic datasets
+%   randMethod = method used to create synthetic data: 'shuffle' 
+%                (randomised) or 'circular' (conveyor belt)
+%   adjMmethod = correlation method for adjacency matrix generation: 
+%            'tileCoef' = STTC, 'correlation','partialcorr','xcorr'
+%   downSample = downsampling (if none = 0)
+%   lag = lag for the correlation or STTC
+%   fs = sampling frequency
+%   tail = confidence interval. Eg input 0.05 for p = 0.05 thresholding and
+%          0.025 for p = 0.025 thresholding. If no input, defaults to 0.05
+
+
+% OUTPUTS:         
+%   adjMci = real adjacency matrix thresholded at "tail" confidence interval
+%            of probabilistic edge weight
+%   CIall = confidence interval for each edge on the basis of the
+%           probabilistic edge weight from n iterations of syntetic data
+
+%% Check 'tail' input
+if (nargin >= 9) && ~isempty(tail)
+   if ischar(tail) || isstring(tail)
+       tail = str2double(tail);
+   end
+else
+   tail = 0.05;
+end
+
+%% Generate synthetic data
+for n = 1:repNum % Loop through iterations of synthetic data
+    
+    % Create a matrix the same size as the real data matrix ('events')
+    SynthDatBin = zeros(size(events)); 
+    
+    % Loop through each cell/node in the network
+    for i = 1:size(events,2)
+        
+        % This method randomises the timing of real events for each
+        % cell/node
+        if strcmp(randMethod, 'shuffle') 
+            BA = find(events(:,i)==1); % Identifies all events in binary matrix
+            % some events are longer than 1 time frame. We need to identify
+            % where these start and stop
+            % subtract each time stamp from the following one:
+            BAi = BA(2:end)-BA(1:end-1);
+            % Identify the start and end of each event by finding non
+            % sequential timestamps:
+            BAs(1) = BA(1); BAs = [BAs; BA(find(BAi>1)+1)]; % BAs is start
+            BAe = BA(BAi>1); BAe = [BAe; BA(length(BA))]; % BAe is end of event
+            BAl = BAe-BAs; % length of each event
+            % Next randomise the timeframe in which each event starts
+            try
+                locs = randi([1 size(events,1)],size(BAl,1),1);
+                for p = 1:length(locs)
+                    SynthDatBin(locs(p):locs(p)+BAl(p),i) = 1;
+                end
+            catch 
+            % If by some misfortune the random assigned timeframe is too
+            % close to the end of the time series (ie the event is too long
+            % to fit in) then this catch statement reassigns timeframes
+            % that are at least 20 frames away from end
+                locs = randi([1 size(events,1)-20],size(BAl,2),1);
+                for p = 1:length(locs)
+                    SynthDatBin(locs(p):locs(p)+BAl(p),i) = 1;
+                end
+            end
+
+            clear BAi BAs BAe BAl locs
+        end
+        
+        % This method cuts the timeseries at a random point for each 
+        % cell/node and inverts both segments
+        if strcmp(randMethod, 'circular')
+            locs = randi(numel(1:size(events,1)));
+            SynthDatBin(1:size(events,1)-locs+1,i) = events(locs:size(events,1),i);
+            SynthDatBin(size(events,1)-locs+2:size(events,1),i) = events(1:locs-1,i);
+        end
+        clear locs
+        
+    end
+    
+    % Generate adjacency matrix from synthetic data
+    adjMs = getAdjM_CaPop(SynthDatBin, adjMmethod, downSample, lag, fs);
+    
+    % Remove negatives, NaNs and nonzero diagonal
+    adjMs(adjMs<0) = 0;
+    adjMs(isnan(adjMs)) = 0;
+    adjMs = adjMs .* ~eye(size(adjMs));
+    
+    % Add to stack of synthetic adjacency matrices
+    adjMi(:,:,n) = adjMs;
+
+end
+
+%% Plot some synthetic data to validate
+% Plot distribution of synthetic edge weights at 5 edges in the top 50% of
+% non-zero connections from real matrix
+adjMord = adjM(:); % Turn matrix into vector 
+adjMord = sort(adjMord); % Lowest to highest 
+adjMord(adjMord==0) = []; % Remove 0 values
+sz = length(adjMord);
+adjMord(1:sz/2) = []; % Take top 50% data
+adjMord(isnan(adjMord)) = []; % Remove NaNs
+randEdges = randi(length(adjMord),[5,1]); % Choose 5 random points
+randEdges = adjMord(randEdges); % and select their values in adjMord
+
+p = [50 150 1200 300];
+set(0, 'DefaultFigurePosition', p)
+F1 = figure;
+for p = 1:5
+    subplot(1,5,p)
+    [r,c] = find(adjM==randEdges(p)); % Locate one of the 5 random points in adjM 
+    dat = adjMi(r(1),c(1),:); % Run along all repNum points  
+    dat = dat(:); % Vectorise 
+    xbins = 0:0.05:1;
+    hist(dat,xbins) % Histogram frequency of occurrence of those random points
+    hold on 
+    plot([adjM(r(1),c(1)) adjM(r(1),c(1))],[0 1000],'r') % Plot value in adjM
+    if p == 1
+    title('Distribution of synthetic edge weights (red line real data)')
+    end
+    xlabel('edge weight')
+    ylabel('frequency')
+    xlim([0 1])
+    ylim([0 100])
+end
+
+%% Stats test         
+% Threshold each element if >= top "tail" % of data 
+adjMci = adjM;
+CIall = zeros(size(adjMci));
+for i = 1:size(adjMi,1)
+    for j = 1:size(adjMi,2)
+        Eu = adjMi(i,j,:);
+        Eu = Eu(:);
+        Eu = sort(Eu,'ascend');
+        CI = Eu(ceil((1 - tail) * length(Eu)));
+        CIall(i,j) = CI;
+        clear Eu
+        if CI > adjM(i,j) 
+            adjMci(i,j) = 0;
+        end
+    end
+end
+
+%% Plot adjacency matrix pre and post thresholding
+p = [50 150 900 300];
+set(0, 'DefaultFigurePosition', p)
+
+F2 = figure;
+
+subplot(1,3,1)
+imagesc(adjM)
+title('Original adjacency matrix')
+xlabel('nodes')
+ylabel('nodes')
+c = colorbar;
+c.Label.String = 'correlation coefficient';
+
+subplot(1,3,2)
+imagesc(adjMci)
+title('Thresholded adjacency matrix')
+xlabel('nodes')
+ylabel('nodes')
+c = colorbar;
+c.Label.String = 'correlation coefficient';
+
+subplot(1,3,3)
+imagesc(adjM - adjMci)
+title('Difference between original and thresholded')
+xlabel('nodes')
+ylabel('nodes')
+c = colorbar;
+c.Label.String = 'correlation coefficient';
+
+limits = F2.Children(5).Limits;
+F2.Children(3).Limits = limits;
+F2.Children(1).Limits = limits;
+F2.Children(2).CLim = limits;
+F2.Children(4).CLim = limits;
+
+end
