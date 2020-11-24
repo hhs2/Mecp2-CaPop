@@ -1,0 +1,194 @@
+function [F1,F2] = heatmapPZ_v4(data1,data2,data3,dpset,sigp,smoothbin,smoothrep,lengthgauss,ellipsesize,allfigs)
+% Written by H Smith, Cambridge, 2020
+
+% Find similar groups in data points by creating a density landscape and
+% identifying basins of attraction as in Guimera & Amaral, 2005 using
+% MATLAB Image Processing Toolbox
+
+% INPUTS:
+%   data1 = x axis data
+%   data2 = y axis data
+%   data3 = same size vector as data1 / data2 but with groups allowing for
+%       different colours at scatterplot at end 
+%   dpset = 2-element vector with dpset(1) being decimal point accuracy for
+%       x axis and dpset(2) being decimal point accuracy for y axis
+%       eg dpset = [2 3] sets x axis to 2dp and y axis to 3dp
+%   sigp = width of ellipse
+%   smoothbin = number of frames to smooth data over in matsmooth_v3
+%   smoothrep = number of repeats of smoothing in matsmooth_v3
+%   allfigs:
+%       = 1 to display all figures 
+
+%   INPUTS WITH SIGNIFICANT EFFECT ON RUNTIME:
+%       lengthgauss = number of datapoints on gaussian distribution
+%       ellipsesize = 2-element vector with ellipsesize(1) being the number
+%           of points in the innermost ellipse around each datapoint and
+%           ellipsesize(2) the outermost ellipse
+%           eg ellipsesize [5 50] sets innermost ellipse to 5 datapoints
+%               and outermost to 50
+
+% OUTPUTS:
+%   F1 = figure showing colour output overlaid over data
+%   F2 = figure showing colour output next to scattered data1 and data2
+
+% FUNCTIONS USED IN CODE:
+%   gausscreate (H Smith)
+%   ellipse (Opensource, adapted by H Smith)
+%   matsmooth_v3 (H Smith)
+%   colapply (H Smith)
+%   customcolormap (Opensource)
+
+% REFERENCES:
+%   Guimera & Amaral, 2005
+%       https://www.nature.com/articles/nature03288
+%       https://static-content.springer.com/esm/art%3A10.1038%2Fnature03288/MediaObjects/41586_2005_BFnature03288_MOESM1_ESM.pdf
+%   MATLAB Image Processing Toolbox guide
+%       https://cis.temple.edu/~latecki/Courses/CIS581-02/MatCIS581-02/Matlab_images_tb.pdf
+
+% FUTURE IMPROVEMENTS:
+%   1. Individual ordinate/ascissa scaling for output figures 
+%   2. Improve smoothing in matsmooth_v3 (possibly with sgolayfilt?)
+
+%% Initialise variables
+data1 = data1(:);
+data2 = data2(:);
+data3 = data3(:);
+
+% Number of decimal places 
+xdp = 10^(-1 * dpset(1));
+ydp = 10^(-1 * dpset(2));
+
+minx = round(min(data1,[],'all') - (1 * abs(min(data1,[],'all'))),dpset(1)) - 0.2;
+maxx = round(max(data1,[],'all') + (1 * abs(min(data1,[],'all'))),dpset(1)) + 0.2;
+miny = round(min(data2,[],'all') - (1 * abs(min(data2,[],'all'))),dpset(2)) - 0.2;
+maxy = round(max(data2,[],'all') + (1 * abs(min(data2,[],'all'))),dpset(2)) + 0.2;
+
+% Create matrix of appropriate size for 3 dp
+xdp = 10^(-1 * dpset(1));
+ydp = 10^(-1 * dpset(2));
+numx = numel(minx : xdp : maxx);
+numy = numel(miny : ydp : maxy);
+matrix = zeros(numy,numx);
+
+sigz = (size(matrix,1)/size(matrix,2)) * sigp; % Rescale for y axis
+
+% sigp = round(sigp,dpset(1));
+% sigz = round(sigz,dpset(2));
+
+%% Generate gaussians around datapoints
+if rem(lengthgauss,2) == 0
+    error('Variable "lengthgauss" must be an odd number')
+end
+lengthvec = lengthgauss; % Must be odd number
+
+blanky = linspace(-sigz,sigz,lengthvec);
+blankx = linspace(-sigp,sigp,lengthvec);
+[~,gaussvec] = gausscreate(lengthvec); % Create Gaussian distribution
+
+middle = ceil(length(gaussvec)/2); % Centre of Gaussian
+
+% Assign a certain number of points per ellipse
+numElpt = linspace(ellipsesize(1),ellipsesize(2),numel(middle:length(gaussvec)));
+numElpt = round(numElpt);
+
+for i = 1:length(data1)
+    mux = data1(i);
+    muy = data2(i);
+    for j = middle : length(blanky)
+        [x,y] = ellipse(blankx(j),blanky(j),0,mux,muy,'k',numElpt(j - (middle-1)));
+        for k = 1:numel(x) % Convert x,y axes into points on matrix
+            xc(k) = numel(minx : xdp : x(k)); 
+            yc(k) = numel(miny : ydp : y(k));
+        end
+        z = gaussvec(j); % Find gaussian height
+        matrix(yc,xc) = matrix(yc,xc) + z;
+        clear xc yc
+    end
+end
+
+%% Create density landscape
+copymat = matrix;
+[smat,~] = matsmooth_v3(copymat,smoothbin,smoothrep,1); % Smooth data
+
+cmat = round((smat * 10),0); % Make integer values including 1dp by *10
+startcol = [1 1 1];
+endcol = [0 0 0];
+resix = 2000;
+resiy = 1000;
+inverton = 0;
+% N.B. check which of R,G,B is most appropriate for data analysis
+[~,~,~,outmat] = colapply(cmat,startcol,endcol,1,1,1,resix,resiy,inverton); % Generate colour vector
+outmat.OuterPosition = [0 0 1 1];
+
+saveas(outmat,'testclear.tif');
+
+% Create axes on plot
+hold on
+plot(1,1,'k');
+outmat.Children.Visible = 'on';
+
+ls = linspace(minx,maxx,resix);
+curr = outmat.Children.XTick;
+for i = 1:length(curr)
+    lxL{i,1} = num2str(ls(curr(i)),'%.1f');
+end
+outmat.Children.XTickLabel = lxL;
+
+lt = linspace(miny,maxy,resiy);
+lt = fliplr(lt);
+cury = outmat.Children.YTick;
+for i = 1:length(cury)
+    lyL{i,1} = num2str(lt(cury(i)),'%.1f');
+end
+outmat.Children.YTickLabel = lyL;
+
+outmat.Children.FontSize = 20;
+
+saveas(outmat,'testgrid.tif');
+
+%% Find basins of attraction
+nogrid = imread('testclear.tif');
+wat = watershed(nogrid); % Find basins of attraction
+rgb = label2rgb(wat(:,:,1));
+
+gridon = imread('testgrid.tif');
+
+rcop = rgb;
+for i = 1:size(rcop,1)
+    for j = 1:size(rcop,2)
+        if rcop(i,j,1) == 0 && rcop(i,j,2) == 0 && rcop(i,j,3) == 128
+            rcop(i,j,1) = 256;
+            rcop(i,j,2) = 256;
+            rcop(i,j,3) = 256;
+        end
+    end
+end
+
+if allfigs ~= 1
+    close all
+end
+
+F1 = figure;
+imshow(gridon);
+hold on
+i2 = imshow(rcop);
+i2.AlphaData = 0.4;
+axis off
+
+F2 = figure;
+c1 = [0 0 0];
+c2 = [0 0 1];
+[f1,~] = find(data3 == 1);
+[f2,~] = find(data3 == 2);
+subplot(1,2,1)
+hold on
+scatter(data1(f1),data2(f1),'MarkerEdgeColor',c1,'MarkerFaceColor',c1)
+scatter(data1(f2),data2(f2),'MarkerEdgeColor',c2,'MarkerFaceColor',c2)
+xlabel('dataset 1');
+ylabel('dataset 2');
+legend('set1','set2');
+
+subplot(1,2,2)
+imshow(rcop);
+
+end
