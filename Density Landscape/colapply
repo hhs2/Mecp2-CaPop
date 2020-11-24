@@ -1,4 +1,4 @@
-function [output,colfig,colscale,onefig] = colapply(input,startcol,endcol,figshow,oneshow,whichone,resi)
+function [output,colfig,colscale,onefig] = colapply(input,startcol,endcol,figshow,oneshow,whichone,resix,resiy,inverton)
 % Written by H Smith, Cambridge, 2020
 % For use with heatmapPZ_v3.m
 % Recommend running with oneshow = 0 and figshow = 1 to start to decide
@@ -16,14 +16,17 @@ function [output,colfig,colscale,onefig] = colapply(input,startcol,endcol,figsho
 %   oneshow:
 %       = 1 to display figure for 1 specific color
 %   whichone = 1, 2, 3 corresponding to R, G or B color
-%   resi = scale of image produced. Recommend set 2000
+%   resix = scale to number of columns
+%   resiy = scale to number of rows
+%   inverton:
+%       = 1 to invert colour of onefig output
 %
 % OUTPUTS:
 %   output = matrix size (:,:,3) for rgb colour values of each element in
 %       input
 %   colfig = handle of figure
 %   colscale = colour sclaing used to generate figures and output
-
+%   onefig = large size image of one of the RGB matrices
 
 colscale = customcolormap([0 1],[endcol ; startcol],(max(input,[],'all')+1));
 
@@ -48,28 +51,28 @@ if figshow == 1
     sgtitle('Individual RGB Values (INVERTED)')
     
     subplot(1,4,1);
-    mat = imresize(output(:,:,1),([resi resi]));
+    mat = imresize(output(:,:,1),([resiy resix]));
     imshow(mat)
     title('Red values')
     colormap(colscale)
     colorbar;
     
     subplot(1,4,2);
-    mat = imresize(output(:,:,2),([resi resi]));
+    mat = imresize(output(:,:,2),([resiy resix]));
     imshow(mat)
     title('Green values')
     colormap(colscale)
     colorbar;
     
     subplot(1,4,3);
-    mat = imresize(output(:,:,3),([resi resi]));
+    mat = imresize(output(:,:,3),([resiy resix]));
     imshow(mat)
     title('Blue values')
     colormap(colscale)
     colorbar;
     
     subplot(1,4,4)
-    mat = imresize(output,([resi resi]));
+    mat = imresize(output,([resiy resix]));
     imshow(mat)
     title('Total')
     colormap(colscale)
@@ -77,9 +80,12 @@ if figshow == 1
 end
 
 if oneshow == 1
-    mat = imresize(output(:,:,whichone),([resi resi]));
+    mat = imresize(output(:,:,whichone),([resiy resix]));
     mat = flipud(mat);
-    onefig = figure;
+    if inverton == 1
+        mat = 1 - mat;
+    end
+    onefig = figure('units','normalized','outerposition',[0 0 1 1]);
     imshow(mat)
 end
     
