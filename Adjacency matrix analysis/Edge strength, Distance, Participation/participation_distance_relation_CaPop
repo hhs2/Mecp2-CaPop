@@ -1,0 +1,190 @@
+function participation_distance_relation_CaPop(projectdir)
+
+cd(projectdir)
+identify = 'CaPopProj'; % Search for all files with CaPopProj in name
+dinfo = dir(fullfile(projectdir,['*' identify '*.mat']));
+filenames = fullfile(projectdir,{dinfo.name});
+num_files = length(filenames);
+
+genotype = zeros(1,num_files);
+
+WTwit = [];
+WTbet = [];
+KOwit = [];
+KObet = [];
+
+WTwitpart = [];
+WTbetpart = [];
+KOwitpart = [];
+KObetpart = [];
+
+for i = 1:num_files
+    load(filenames{i}); % Load files
+    
+    if strcmp(Info.Genotype,'WT')
+        genotype(i) = 1; % 0 = KO, 1 = WT
+    end
+    
+    adjM = adjmake(Info,BinEvents);
+    [distn,~] = dist_build_CaPop(adjM, coords);
+    
+    AdjAll{i} = adjM;
+    DistAll{i} = distn;
+    [Ci,~] = modularity_und(adjM);
+    P = participation_coef(adjM,Ci,0);
+    
+    PAll{i} = P;
+    
+    EdgeData{i} = [];
+    PartData{i} = [];
+    PartDataOne{i} = [];
+    PartDataTwo{i} = [];
+    for j = 1:length(adjM) % For each node
+        [f,~] = find(adjM(:,j) > 0); % Find connections
+        for k = 1:length(f) % For each node's connections
+            EdgeData{i} = [EdgeData{i} distn(f(k),j)];
+            meanpart = (P(j) + P(f(k))) / 2;
+            PartData{i} = [PartData{i} meanpart];
+            
+            PartDataOne{i} = [PartDataOne{i} P(j)];
+            PartDataTwo{i} = [PartDataTwo{i} P(f(k))];
+            
+            wit = 0;
+            bet = 0;
+            
+            if Ci(j) == Ci(f(k)) && genotype(i) == 1
+                WTwitpart = [WTwitpart meanpart];
+                WTwit = [WTwit distn(f(k),j)];
+            elseif Ci(j) ~= Ci(f(k)) && genotype(i) == 1
+                WTbetpart = [WTbetpart meanpart];
+                WTbet = [WTbet distn(f(k),j)];
+            elseif Ci(j) == Ci(f(k)) && genotype(i) == 0
+                KOwitpart = [KOwitpart meanpart];
+                KOwit = [KOwit distn(f(k),j)];
+            elseif Ci(j) ~= Ci(f(k)) && genotype(i) == 0
+                KObetpart = [KObetpart meanpart];
+                KObet = [KObet distn(f(k),j)];
+            end
+        end
+    end
+end
+
+%%
+F1 = figure;
+subplot(1,2,1)
+ea = [];
+pa = [];
+for i = 1:length(genotype)
+    if genotype(i) == 0 % KO
+        continue
+    end
+    ea = [ea EdgeData{i}];
+    pa = [pa PartData{i}];
+end
+clear X
+X(:,1) = ea;
+X(:,2) = pa;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Dist','Part'});
+title(['WT Av Part x Dist, P = ' num2str(PValue(3))])
+
+subplot(1,2,2)
+ea = [];
+pa = [];
+for i = 1:length(genotype)
+    if genotype(i) == 1 % WT
+        continue
+    end
+    ea = [ea EdgeData{i}];
+    pa = [pa PartData{i}];
+end
+clear X
+X(:,1) = ea;
+X(:,2) = pa;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Dist','Part'});
+title(['KO Av Part x Dist, P = ' num2str(PValue(3))])
+
+%%
+F2 = figure;
+subplot(2,2,1)
+clear X
+X(:,1) = WTbet;
+X(:,2) = WTbetpart;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Dist','Part'});
+title(['WT Between Av Part x Dist, P = ' num2str(PValue(3))])
+
+subplot(2,2,2)
+clear X
+X(:,1) = WTwit;
+X(:,2) = WTwitpart;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Dist','Part'});
+title(['WT Within Av Part x Dist, P = ' num2str(PValue(3))])
+
+subplot(2,2,3)
+clear X
+X(:,1) = KObet;
+X(:,2) = KObetpart;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Dist','Part'});
+title(['KO Between Av Part x Dist, P = ' num2str(PValue(3))])
+
+subplot(2,2,4)
+clear X
+X(:,1) = KOwit;
+X(:,2) = KOwitpart;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Dist','Part'});
+title(['KO Within Av Part x Dist, P = ' num2str(PValue(3))])
+
+%%
+WTpa = [];
+WTdi = [];
+KOpa = [];
+KOdi = [];
+for i = 1:length(genotype)
+    if genotype(i) == 1
+        WTpa = [WTpa PartDataOne{i} PartDataTwo{i}];
+        WTdi = [WTdi EdgeData{i} EdgeData{i}];
+    elseif genotype(i) == 0
+        KOpa = [KOpa PartDataOne{i} PartDataTwo{i}];
+        KOdi = [KOdi EdgeData{i} EdgeData{i}];
+    end
+end
+
+F3 = figure;
+subplot(1,2,1)
+clear X
+X(:,1) = WTdi;
+X(:,2) = WTpa;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Dist','Part'});
+title(['WT Part x Dist, P = ' num2str(PValue(3))])
+
+subplot(1,2,2)
+clear X
+X(:,1) = KOdi;
+X(:,2) = KOpa;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Dist','Part'});
+title(['KO Part x Dist, P = ' num2str(PValue(3))])
+
+%%
+PWT = [];
+PKO = [];
+for i = 1:length(genotype)
+    if genotype(i) == 1
+        PWT = [PWT PAll{i}'];
+    elseif genotype(i) == 0
+        PKO = [PKO PAll{i}'];
+    end
+end
+c1 = [0.471 0.674 0.188]; % green
+c2 = [0.027 0.306 0.659]; % dark blue
+xlab = 'WT || KO';
+ylab = 'Participation coefficient';
+titl = 'Comparing participation coefficients';
+F4 = meanstest_v2(PWT,PKO,c1,c2,xlab,ylab,titl);
+
+PWTc = PWT;
+PWTc(PWTc == 0) = [];
+PKOc = PKO;
+PKOc(PKOc == 0) = [];
+titl = 'Comparing participation coefficients (zeros removed)';
+F5 = meanstest_v2(PWTc,PKOc,c1,c2,xlab,ylab,titl);
+
+end
