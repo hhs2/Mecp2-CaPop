@@ -1,0 +1,22 @@
+function adjM = adjmake(Info,BinEvents)
+
+fs = str2double(Info.FrRate)/1000;
+method = 'tileCoef';
+downSample = 0;
+lag = 1; 
+
+adjM = getAdjM_CaPop(BinEvents, method, downSample, fs, lag);
+
+adjM(adjM<0) = 0;
+adjM(isnan(adjM)) = 0;
+adjM = adjM .* ~eye(size(adjM));
+
+% Remove statistically insignificant results
+repNum = 100;
+randMethod = 'circular';
+adjMmethod = method;
+tail = 0.05;
+[adjM,~] = AdjMProbabilisticThresh_v2(BinEvents,adjM,repNum,randMethod,adjMmethod,downSample,lag,fs,tail);
+close all
+
+end
