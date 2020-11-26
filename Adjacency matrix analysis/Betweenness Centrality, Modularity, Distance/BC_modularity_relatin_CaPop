@@ -1,0 +1,216 @@
+function BC_modularity_relation_CaPop(projectdir)
+
+c1 = [0.471 0.674 0.188]; % green
+c2 = [0.027 0.306 0.659]; % dark blue
+
+cd(projectdir)
+identify = 'CaPopProj'; % Search for all files with CaPopProj in name
+dinfo = dir(fullfile(projectdir,['*' identify '*.mat']));
+filenames = fullfile(projectdir,{dinfo.name});
+num_files = length(filenames);
+
+genotype = zeros(1,num_files);
+
+BetTotal = [];
+WiTotal = [];
+
+WTBetTotal = [];
+KOBetTotal = [];
+
+WTWiTotal = [];
+KOWiTotal = [];
+
+for i = 1:num_files
+    load(filenames{i}); % Load files
+    
+    if strcmp(Info.Genotype,'WT')
+        genotype(i) = 1; % 0 = KO, 1 = WT
+    end
+    
+    adjM = adjmake(Info,BinEvents);
+    [Ci,~]=modularity_und(adjM);
+    BC = betweenness_wei(adjM);
+    BC = BC/((length(adjM)-1)*(length(adjM)-2));
+    
+    CiAll{i} = Ci;
+    BCAll{i} = BC;
+    AdjAll{i} = adjM;
+end
+
+lengthsize = 0;
+for i = 1:length(CiAll)
+    lengthsize = lengthsize + numel(unique(CiAll{i}));
+end
+
+[~,ff] = find(genotype == 1); % WT
+[~,fg] = find(genotype == 0); % KO
+reorder = [ff fg];
+
+%% All data spread
+F1 = figure;
+hold on
+xvec = 1:lengthsize;
+xval = 1;
+
+for i = 1:length(reorder)
+    
+    projectnum = reorder(i);
+    Ci = CiAll{projectnum};
+    BC = BCAll{projectnum};
+    
+    if genotype(projectnum) == 0 % KO
+        c = c2;
+    elseif genotype(projectnum) == 1 % WT
+        c = c1;
+    end
+
+    for j = 1:length(unique(Ci))
+        [f,~] = find(Ci == j);
+        BCvec = BC(f);
+        ln = length(BCvec);
+        scatter(xvec(xval) * ones(ln,1) , BCvec, 'MarkerFaceColor',c,'MarkerEdgeColor',c)
+        clear BCvec f
+        xval = xval + 1;
+    end
+end
+xlabel('Module group')
+ylabel('Betweenness centrality')
+title('Spread of betweenness centrality across module groups')
+
+d1 = scatter(-1,-1,'MarkerFaceColor',c1,'MarkerEdgeColor',c1);
+d2 = scatter(-1,-1,'MarkerFaceColor',c2,'MarkerEdgeColor',c2);
+legend([d1 d2],'String',{'Wild type','Knockout'})
+xlim([xvec(1) xvec(end)])
+
+%% Coloured by connection type
+F2 = figure;
+F2.OuterPosition = [50   100   1250  700];
+
+totalprop = [];
+for i = 1:length(genotype)
+    Ci = CiAll{i};
+    BC = BCAll{i};
+    adjM = AdjAll{i};
+    inputdata{i} = zeros(3,length(adjM));
+    for j = 1:length(adjM)
+        inputdata{i}(1,j) = Ci(j);
+        inputdata{i}(2,j) = BC(j);
+        [f,~] = find(adjM(:,j) > 0);
+        numwit = 0;
+        numbet = 0;
+        for k = 1:length(f)
+            if Ci(j) == Ci(f(k))
+                numwit = numwit + 1;
+            elseif Ci(j) ~= Ci(f(k))
+                numbet = numbet + 1;
+            end
+        end
+        inputdata{i}(3,j) = numbet / (numbet+numwit);
+        totalprop = [totalprop (numbet/(numbet+numwit))];
+    end
+end
+
+prop = linspace(0,max(totalprop,[],'all'),max(totalprop,[],'all')*1000);
+mycolormap = customcolormap([0 0.5 1],[0 0 0.5; 0.5 0.5 0.25; 1 1 0],length(prop));
+
+subplot(1,2,1)
+hold on
+xvec = 0;
+for i = 1:length(genotype)
+    if genotype(i) == 0 % Skip if KO
+        continue
+    end
+    for j = 1:length(unique(inputdata{i}(1,:))) % For each mod group
+        [~,f] = find(inputdata{i}(1,:) == j); % Find nodes in that group
+        for k = 1:length(f) % For the nodes in that group
+            [~,ff] = min(abs(prop - inputdata{i}(3,f(k)))); % Find the closest match to prop
+            c = mycolormap(ff,:); % Assign it that colour
+            scatter(xvec,inputdata{i}(2,f(k)),'MarkerFaceColor',c,'MarkerEdgeColor',c)
+        end
+        xvec = xvec + 1;
+    end
+end
+xlabel('Modularity group')
+ylabel('Betweenness centrality')
+title('Wild type')
+ylim([0 0.3])
+
+subplot(1,2,2)
+hold on
+xvec = 0;
+for i = 1:length(genotype)
+    if genotype(i) == 1 % Skip if WT
+        continue
+    end
+    for j = 1:length(unique(inputdata{i}(1,:))) % For each mod group
+        [~,f] = find(inputdata{i}(1,:) == j); % Find nodes in that group
+        for k = 1:length(f) % For the nodes in that group
+            [~,ff] = min(abs(prop - inputdata{i}(3,f(k)))); % Find the closest match to prop
+            c = mycolormap(ff,:); % Assign it that colour
+            scatter(xvec,inputdata{i}(2,f(k)),'MarkerFaceColor',c,'MarkerEdgeColor',c)
+        end
+        xvec = xvec + 1;
+    end
+end
+xlabel('Modularity group')
+ylabel('Betweenness centrality')
+title('Knockout')
+ylim([0 0.3])
+        
+hCB = colorbar;
+colormap(mycolormap);
+hCB.Location = 'eastoutside';
+hCB.FontSize = 1e-20;
+ax = axes('Position',hCB.Position,'color','none');
+ax.XAxis.Visible = 'off';
+ax.YAxisLocation = 'right';
+ax.YLim = [0 max(prop,[],'all')];
+ylabel(ax,'Colour = propotion of connections that are between modularity group','Rotation',90,'FontWeight','bold')
+
+%% X axis BC, Y Axis propotion
+F3 = figure;
+subplot(2,2,1)
+BCw = [];
+PBetW = [];
+for i = 1:length(genotype)
+    if genotype(i) == 0 % KO
+        continue
+    end
+    BCw = [BCw BCAll{i}'];
+    PBetW = [PBetW inputdata{i}(3,:)];
+end
+scatter(BCw,PBetW,'MarkerFaceColor',c1,'MarkerEdgeColor',c1)
+xlabel('Betweenness centrality')
+ylabel('Proportion of between-group connections')
+title('Wild  type')
+
+subplot(2,2,2)
+clear X
+X(:,1) = BCw;
+X(:,2) = PBetW;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'BC','p(Bet)'});
+title(['Wild type, P = ' num2str(PValue(3))])
+
+subplot(2,2,3)
+BCk = [];
+PBetk = [];
+for i = 1:length(genotype)
+    if genotype(i) == 1 % KO
+        continue
+    end
+    BCk = [BCk BCAll{i}'];
+    PBetk = [PBetk inputdata{i}(3,:)];
+end
+scatter(BCk,PBetk,'MarkerFaceColor',c2,'MarkerEdgeColor',c2)
+xlabel('Betweenness centrality')
+ylabel('Proportion of between-group connections')
+title('Knockout')
+
+subplot(2,2,4)
+clear X
+X(:,1) = BCk;
+X(:,2) = PBetk;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'BC','p(Bet)'});
+title(['KO, P = ' num2str(PValue(3))])
+
+end
