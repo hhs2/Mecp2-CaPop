@@ -1,0 +1,178 @@
+function participation_strength_relation_CaPop(projectdir)
+
+cd(projectdir)
+identify = 'CaPopProj'; % Search for all files with CaPopProj in name
+dinfo = dir(fullfile(projectdir,['*' identify '*.mat']));
+filenames = fullfile(projectdir,{dinfo.name});
+num_files = length(filenames);
+
+genotype = zeros(1,num_files);
+
+WTp = []; % Participation coef
+KOp = [];
+WTe = []; % Sum of edge strength
+KOe = [];
+WTem = []; % Average edge strength
+KOem = [];
+
+WTebet = [];
+WTebetm = [];
+WTewit = [];
+WTewitm = [];
+
+KOebet = [];
+KOebetm = [];
+KOewit = [];
+KOewitm = [];
+
+for i = 1:num_files
+    load(filenames{i}); % Load files
+    
+    if strcmp(Info.Genotype,'WT')
+        genotype(i) = 1; % 0 = KO, 1 = WT
+    end
+    
+    adjM = adjmake(Info,BinEvents);
+    [distn,~] = dist_build_CaPop(adjM, coords);
+    
+    AdjAll{i} = adjM;
+    DistAll{i} = distn;
+    [Ci,~] = modularity_und(adjM);
+    P = participation_coef(adjM,Ci,0);
+    
+    PAll{i} = P;
+    
+    if genotype(i) == 1
+        WTp = [WTp P'];
+        WTe = [WTe sum(adjM)];
+        for j = 1:length(adjM)
+            WTem = [WTem (sum(adjM(:,j)) / length(find(adjM(:,j) > 0)))];
+            [f,~] = find(adjM(:,j) > 0);
+            allwit = 0;
+            allbet = 0;
+            for k = 1:length(f)
+                if Ci(j) == Ci(f(k))
+                    allwit = allwit + adjM(f(k),j);
+                elseif Ci(j) ~= Ci(f(k))
+                    allbet = allbet + adjM(f(k),j);
+                end
+            end
+            WTebet = [WTebet allbet];
+            WTewit = [WTewit allwit];
+            WTebetm = [WTebetm (allbet / length(allbet))];
+            WTewitm = [WTewitm (allwit / length(allwit))];
+        end
+    elseif  genotype(i) == 0
+        KOp = [KOp P'];
+        KOe = [KOe sum(adjM)];
+        for j = 1:length(adjM)
+            KOem = [KOem (sum(adjM(:,j)) / length(find(adjM(:,j) > 0)))];
+            [f,~] = find(adjM(:,j) > 0);
+            allwit = 0;
+            allbet = 0;
+            for k = 1:length(f)
+                if Ci(j) == Ci(f(k))
+                    allwit = allwit + adjM(f(k),j);
+                elseif Ci(j) ~= Ci(f(k))
+                    allbet = allbet + adjM(f(k),j);
+                end
+            end
+            KOebet = [KOebet allbet];
+            KOewit = [KOewit allwit];
+            KOebetm = [KOebetm (allbet / length(allbet))];
+            KOewitm = [KOewitm (allwit / length(allwit))];
+        end
+    end
+end
+
+%% 
+F1 = figure;
+subplot(2,2,1)
+clear X
+X(:,1) = WTe;
+X(:,2) = WTp;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Strn','Part'});
+title(['WT Part x Total Strength, P = ' num2str(PValue(3))])
+
+subplot(2,2,2)
+clear X
+X(:,1) = WTem;
+X(:,2) = WTp;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Strn','Part'});
+title(['WT Part x Mean Strength, P = ' num2str(PValue(3))])
+
+subplot(2,2,3)
+clear X
+X(:,1) = KOe;
+X(:,2) = KOp;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Strn','Part'});
+title(['KO Part x Total Strength, P = ' num2str(PValue(3))])
+
+subplot(2,2,4)
+clear X
+X(:,1) = KOem;
+X(:,2) = KOp;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Strn','Part'});
+title(['KO Part x Mean Strength, P = ' num2str(PValue(3))])
+
+%% 
+F2 = figure;
+subplot(2,2,1)
+clear X
+X(:,1) = WTebet;
+X(:,2) = WTp;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Strn','Part'});
+title(['WT Part x Between Strength, P = ' num2str(PValue(3))])
+
+subplot(2,2,2)
+clear X
+X(:,1) = WTewit;
+X(:,2) = WTp;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Strn','Part'});
+title(['WT Part x Within Strength, P = ' num2str(PValue(3))])
+
+subplot(2,2,3)
+clear X
+X(:,1) = KOebet;
+X(:,2) = KOp;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Strn','Part'});
+title(['KO Part x Between Strength, P = ' num2str(PValue(3))])
+
+subplot(2,2,4)
+clear X
+X(:,1) = KOewit;
+X(:,2) = KOp;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Strn','Part'});
+title(['KO Part x Within Strength, P = ' num2str(PValue(3))])
+
+%%
+F3 = figure;
+subplot(2,2,1)
+clear X
+X(:,1) = WTebetm;
+X(:,2) = WTp;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Strn','Part'});
+title(['WT Part x mean Between Strength, P = ' num2str(PValue(3))])
+
+subplot(2,2,2)
+clear X
+X(:,1) = WTewitm;
+X(:,2) = WTp;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Strn','Part'});
+title(['WT Part x mean Within Strength, P = ' num2str(PValue(3))])
+
+subplot(2,2,3)
+clear X
+X(:,1) = KOebetm;
+X(:,2) = KOp;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Strn','Part'});
+title(['KO Part x mean Between Strength, P = ' num2str(PValue(3))])
+
+subplot(2,2,4)
+clear X
+X(:,1) = KOewitm;
+X(:,2) = KOp;
+[~,PValue,~] = corrplot(X,'type','Spearman','varNames',{'Strn','Part'});
+title(['KO Part x mean Within Strength, P = ' num2str(PValue(3))])
+
+end
