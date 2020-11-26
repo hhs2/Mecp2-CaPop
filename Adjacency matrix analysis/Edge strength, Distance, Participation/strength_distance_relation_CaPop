@@ -1,0 +1,125 @@
+function strength_distance_relation_CaPop(projectdir)
+
+c1 = [0.471 0.674 0.188]; % green
+c2 = [0.027 0.306 0.659]; % dark blue
+
+cd(projectdir)
+identify = 'CaPopProj'; % Search for all files with CaPopProj in name
+dinfo = dir(fullfile(projectdir,['*' identify '*.mat']));
+filenames = fullfile(projectdir,{dinfo.name});
+num_files = length(filenames);
+
+genotype = zeros(1,num_files);
+
+WTda = []; % Distance all
+WTaa = []; % Adjacency all
+KOda = [];
+KOaa = [];
+
+WTbd = []; % Between distance
+KObd = [];
+WTwd = []; % Within distance
+KOwd = [];
+
+WTba = []; % Between adjacency
+KOba = [];
+WTwa = []; % Within adjacency
+KOwa = [];
+
+for i = 1:num_files
+    load(filenames{i}); % Load files
+    
+    if strcmp(Info.Genotype,'WT')
+        genotype(i) = 1; % 0 = KO, 1 = WT
+    end
+    
+    adjM = adjmake(Info,BinEvents);
+    [distn,~] = dist_build_CaPop(adjM, coords);
+    
+    AdjAll{i} = adjM;
+    DistAll{i} = distn;
+    [Ci,~] = modularity_und(adjM);
+    
+    ac = adjM(:);
+    dc = distn(:);
+    [f,~] = find(ac == 0);
+    ac(f) = [];
+    dc(f) = [];
+    
+    if genotype(i) == 1
+        WTaa = [WTaa ac'];
+        WTda = [WTda dc'];
+    elseif genotype(i) == 0
+        KOaa = [KOaa ac'];
+        KOda = [KOda dc'];
+    end
+    
+    for j = 1:length(adjM) % For each node
+        [f2,~] = find(adjM(:,j) > 0); % Find connections
+        for k = 1:length(f2) % For each node's connections
+            if Ci(j) == Ci(f2(k)) % If within group
+                if genotype(i) == 1 % If WT
+                    WTwd = [WTwd distn(f2(k),j)];
+                    WTwa = [WTwa adjM(f2(k),j)];
+                elseif genotype(i) == 0 % If KO
+                    KOwd = [KOwd distn(f2(k),j)];
+                    KOwa = [KOwa adjM(f2(k),j)];
+                end
+            elseif Ci(j) ~= Ci(f2(k)) % If between group
+                if genotype(i) == 1 % If WT
+                    WTbd = [WTbd distn(f2(k),j)];
+                    WTba = [WTba adjM(f2(k),j)];
+                elseif genotype(i) == 0 % If KO
+                    KObd = [KObd distn(f2(k),j)];
+                    KOba = [KOba adjM(f2(k),j)];
+                end
+            end
+        end
+    end
+end
+
+%% 
+F1 = figure;
+subplot(2,3,1)
+clear X
+X(:,1) = WTda;
+X(:,2) = WTaa;
+[~,PValue,~] = corrplot(X,'type','Pearson','varNames',{'Dist','Strn'});
+title(['WT Strength x Distance, P = ' num2str(PValue(3))])
+
+subplot(2,3,2)
+clear X
+X(:,1) = WTbd;
+X(:,2) = WTba;
+[~,PValue,~] = corrplot(X,'type','Pearson','varNames',{'Dist','Strn'});
+title(['WT Between Group Str x Dist, P = ' num2str(PValue(3))])
+
+subplot(2,3,3)
+clear X
+X(:,1) = WTwd;
+X(:,2) = WTwa;
+[~,PValue,~] = corrplot(X,'type','Pearson','varNames',{'Dist','Strn'});
+title(['WT Within Group Str x Dist, P = ' num2str(PValue(3))])
+
+subplot(2,3,4)
+clear X
+X(:,1) = KOda;
+X(:,2) = KOaa;
+[~,PValue,~] = corrplot(X,'type','Pearson','varNames',{'Dist','Strn'});
+title(['KO Strength x Distance, P = ' num2str(PValue(3))])
+
+subplot(2,3,5)
+clear X
+X(:,1) = KObd;
+X(:,2) = KOba;
+[~,PValue,~] = corrplot(X,'type','Pearson','varNames',{'Dist','Strn'});
+title(['KO Between Group Str x Dist, P = ' num2str(PValue(3))])  
+
+subplot(2,3,6)
+clear X
+X(:,1) = KOwd;
+X(:,2) = KOwa;
+[~,PValue,~] = corrplot(X,'type','Pearson','varNames',{'Dist','Strn'});
+title(['KO Within Group Str x Dist, P = ' num2str(PValue(3))])
+
+end
