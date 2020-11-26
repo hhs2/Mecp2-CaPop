@@ -1,0 +1,274 @@
+function distance_modularity_relation_CaPop(projectdir)
+
+cd(projectdir)
+identify = 'CaPopProj'; % Search for all files with CaPopProj in name
+dinfo = dir(fullfile(projectdir,['*' identify '*.mat']));
+filenames = fullfile(projectdir,{dinfo.name});
+num_files = length(filenames);
+
+genotype = zeros(1,num_files);
+
+DistTotal = [];
+DistBetTotal = [];
+DistWiTotal = [];
+
+DistWTtotal = [];
+DistWTbet = [];
+DistWTwi = [];
+
+DistKOtotal = [];
+DistKObet = [];
+DistKOwi = [];
+
+c1 = [0.471 0.674 0.188]; % green
+c2 = [0.027 0.306 0.659]; % blue
+c3 = [0.91 0.41 0.17]; % dark green
+c4 = [0.471 0.674 0.188]; % light green
+c5 = [0 0 0.543]; % dark blue
+c6 = [0.6758 0.8438 0.8984]; % light blue
+c7 = [0.91 0.41 0.17]; % orange
+c8 = [0.502 0 0.502]; % purple
+
+for i = 1:num_files
+    load(filenames{i}); % Load files
+    
+    if strcmp(Info.Genotype,'WT')
+        genotype(i) = 1; % 0 = knockout, 1 = wildtype
+    end
+    
+    adjM = adjmake(Info,BinEvents);
+    
+    [distn,~] = dist_build_CaPop(adjM, coords);
+    
+    distcop = distn;
+    distcop = distcop(:);
+    distcop(isnan(distcop)) = [];
+    DistTotal = [DistTotal distcop'];
+    
+    if genotype(i) == 1 % WT
+        DistWTtotal = [DistWTtotal distcop'];
+    elseif genotype(i) == 0 % KO
+        DistKOtotal = [DistKOtotal distcop'];
+    end
+      
+    [Ci,~]=modularity_und(adjM);
+    
+    for j = 1:length(Ci)
+        [f,~] = find(adjM(:,j) > 0);
+        for k = 1:length(f)
+            if Ci(j) == Ci(f(k)) % Within group
+                DistWiTotal = [DistWiTotal distn(f(k),j)];
+                if genotype(i) == 1 % WT
+                    DistWTwi = [DistWTwi distn(f(k),j)];
+                elseif genotype(i) == 0 % KO
+                    DistKOwi = [DistKOwi distn(f(k),j)];
+                end
+            elseif Ci(j) ~= Ci(f(k)) % Between group
+                DistBetTotal = [DistBetTotal distn(f(k),j)];
+                if genotype(i) == 1 % WT
+                    DistWTbet = [DistWTbet distn(f(k),j)];
+                elseif genotype(i) == 0 % KO
+                    DistKObet = [DistKObet distn(f(k),j)];
+                end
+            end
+        end
+    end
+end
+
+%% Stacked bars
+F1 = figure;
+sgtitle('Considering physical distance between nodes - Stacked Bars')
+
+subplot(2,3,1)
+histogram(DistWTtotal,'FaceColor',c1);
+hold on
+histogram(DistKOtotal,'FaceColor',c2);
+xlabel('Physical distance between nodes')
+ylabel('Frequency')
+legend('Wild type','Knockout')
+title('All data')
+
+subplot(2,3,2)
+hold on
+maxout = max(DistWTtotal,[],'all');
+maxout = ceil(maxout/5)*5;
+binrng = 0:5:maxout;
+for i = 1:length(binrng)-1
+    clear dcop
+    dcop = DistWTwi;
+    dcop(dcop < binrng(i)) = [];
+    dcop(dcop > binrng(i+1)) = [];
+    win(i) = numel(dcop);
+    
+    clear dcop
+    dcop = DistWTbet;
+    dcop(dcop < binrng(i)) = [];
+    dcop(dcop > binrng(i+1)) = [];
+    bin(i) = numel(dcop);
+    
+    rec(i) = binrng(i) + 2.5;
+end
+tot = bin + win;
+a1 = bar(rec,tot,1,'FaceColor',c7);
+a2 = bar(rec,bin,1,'FaceColor',c8);
+xlabel('Physical distance between nodes')
+ylabel('Frequency')
+title('Wild type')
+legend('Within-group','Between-group')
+
+clear dcop win bin rec tot 
+
+subplot(2,3,3)
+hold on
+maxout = max(DistKOtotal,[],'all');
+maxout = ceil(maxout/10)*10;
+binrng = 0:10:maxout;
+for i = 1:length(binrng)-1
+    clear dcop
+    dcop = DistKOwi;
+    dcop(dcop < binrng(i)) = [];
+    dcop(dcop > binrng(i+1)) = [];
+    win(i) = numel(dcop);
+    
+    clear dcop
+    dcop = DistKObet;
+    dcop(dcop < binrng(i)) = [];
+    dcop(dcop > binrng(i+1)) = [];
+    bin(i) = numel(dcop);
+    
+    rec(i) = binrng(i) + 5;
+end
+tot = bin + win;
+a1 = bar(rec,tot,1,'FaceColor',c7);
+a2 = bar(rec,bin,1,'FaceColor',c8);
+xlabel('Physical distance between nodes')
+ylabel('Frequency')
+title('Knockout')
+legend('Within-group','Between-group')
+
+subplot(2,3,4)
+histogram(DistWiTotal,'FaceColor',[0.502 0 0.502]);
+hold on
+histogram(DistBetTotal,'FaceColor',[0.91 0.41 0.17]);
+xlabel('Physical distance between nodes')
+ylabel('Frequency')
+legend('Within group','Between group')
+title('All data')
+
+subplot(2,3,5)
+clear dcop win bin rec tot 
+maxout = max(DistBetTotal,[],'all');
+maxout = ceil(maxout/10)*10;
+binrng = 0:10:maxout;
+for i = 1:length(binrng)-1
+    clear dcop
+    dcop = DistWTbet;
+    dcop(dcop < binrng(i)) = [];
+    dcop(dcop > binrng(i+1)) = [];
+    win(i) = numel(dcop);
+    
+    clear dcop
+    dcop = DistKObet;
+    dcop(dcop < binrng(i)) = [];
+    dcop(dcop > binrng(i+1)) = [];
+    bin(i) = numel(dcop);
+    
+    rec(i) = binrng(i) + 5;
+end
+tot = bin + win;
+a1 = bar(rec,tot,1,'FaceColor',c1);
+hold on
+a2 = bar(rec,bin,1,'FaceColor',c2);
+xlabel('Physical distance between nodes')
+ylabel('Frequency')
+title('Between-group')
+legend('WT','KO')
+
+subplot(2,3,6)
+clear dcop win bin rec tot 
+maxout = max(DistWiTotal,[],'all');
+maxout = ceil(maxout/10)*10;
+binrng = 0:10:maxout;
+for i = 1:length(binrng)-1
+    clear dcop
+    dcop = DistWTwi;
+    dcop(dcop < binrng(i)) = [];
+    dcop(dcop > binrng(i+1)) = [];
+    win(i) = numel(dcop);
+    
+    clear dcop
+    dcop = DistKOwi;
+    dcop(dcop < binrng(i)) = [];
+    dcop(dcop > binrng(i+1)) = [];
+    bin(i) = numel(dcop);
+    
+    rec(i) = binrng(i) + 5;
+end
+tot = bin + win;
+a1 = bar(rec,tot,1,'FaceColor',c1);
+hold on
+a2 = bar(rec,bin,1,'FaceColor',c2);
+xlabel('Physical distance between nodes')
+ylabel('Frequency')
+title('Within-group')
+legend('WT','KO')
+
+%% Histogram
+F2 = figure;
+sgtitle('Considering physical distance between nodes - Histogram')
+
+subplot(2,3,1)
+histogram(DistWTtotal,'FaceColor',c1);
+hold on
+histogram(DistKOtotal,'FaceColor',c2);
+xlabel('Physical distance between nodes')
+ylabel('Frequency')
+legend('Wild type','Knockout')
+title('All data')
+
+subplot(2,3,2)
+histogram(DistWTwi,'FaceColor',c7);
+hold on
+histogram(DistWTbet,'FaceColor',c8);
+xlabel('Physical distance between nodes')
+ylabel('Frequency')
+title('Wild type')
+legend('Within-group','Between-group')
+
+subplot(2,3,3)
+histogram(DistKOwi,'FaceColor',c7);
+hold on
+histogram(DistKObet,'FaceColor',c8);
+xlabel('Physical distance between nodes')
+ylabel('Frequency')
+title('Knockout')
+legend('Within-group','Between-group')
+
+subplot(2,3,4)
+histogram(DistWiTotal,'FaceColor',[0.502 0 0.502]);
+hold on
+histogram(DistBetTotal,'FaceColor',[0.91 0.41 0.17]);
+xlabel('Physical distance between nodes')
+ylabel('Frequency')
+legend('Within group','Between group')
+title('All data')
+
+subplot(2,3,5)
+histogram(DistWTbet,'FaceColor',c1)
+hold on
+histogram(DistKObet,'FaceColor',c2)
+xlabel('Physical distance between nodes')
+ylabel('Frequency')
+title('Between-group')
+legend('WT','KO')
+
+subplot(2,3,6)
+histogram(DistWTwi,'FaceColor',c1)
+hold on
+histogram(DistKOwi,'FaceColor',c2)
+xlabel('Physical distance between nodes')
+ylabel('Frequency')
+title('Within-group')
+legend('WT','KO')
+
+end
