@@ -1,0 +1,60 @@
+function mcca_threshold_track(randomRepeat,adjMmod)
+% H Smith, Cambridge, 2020
+% Track how a set of adjacency matrices produced from the same data set
+% cluster into different numbers of modularity groups depending on the
+% threshold used in consensus clustering
+% 
+% INPUTS:
+%   randomRepeat: number of iterations to run for each consensus clustering
+%       trial set
+%   adjMmod: set of n adjacency matrices where each adjacency matrix is
+%       generated from the same original adjacency matrix passed through a
+%       version of probabilistic thresholding and therefore is slightly
+%       different
+
+
+
+eva = zeros(1,numel(0.01:0.02:0.4));
+c = 1;
+
+for threshold = 0.01:0.02:0.4
+    for i = 1:randomRepeat
+        [M{i},~,~] = mod_consensus_cluster_iterate(adjMmod{i},threshold,50);
+        fprintf('%d. Complete', i);
+    end
+
+    [D] = consensus_coclassify(M);
+    D(D < threshold) = 0;
+
+    num_repeats = 0;
+    blockdiag = 0;
+
+    while blockdiag ~= 1 % Stop when D is block diagonal
+        % Run community detection on thresholded matrix
+        B = cell(repNum,1); % Overwrite
+        B{repNum,1} = [];
+        Q = B;
+        for i = 1:repNum
+            [B{i},Q{i}] = community_louvain(D);
+        end
+
+        % Calculate consensus coclassification matrix on new community
+        [D] = consensus_coclassify(B);
+        D(D < threshold) = 0;
+
+        num_repeats = num_repeats + 1;
+        blockdiag = consensuscheck(D);
+    end
+    
+    eva(c) = length(unique(B{1}));
+    c = c + 1;
+end
+
+xax = 0.01:0.02:0.4;
+figure
+plot(xax,eva);
+xlabel('Threshold')
+ylabel('Number of modularity groups')
+title('Considering thresholding for consensus clustering')
+
+end
