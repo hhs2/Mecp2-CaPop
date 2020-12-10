@@ -1,0 +1,643 @@
+function F1 = plot_distBC_modularity_CaPop_v2(Info,BinEvents,coords,edge_thresh,threshMax,type,edgy,scnode,scdist,prethresh)
+% Written by H Smith, Cambridge, 2020
+% Adapted from code by A Dunn and RC Feord
+% Plot circular network plot reorganising node location by modularity 
+% v2 update: correct errors in edge plotting
+%
+% INPUTS:
+%   Info = storage used for information about the dataset. Used to extract
+%       frame rate
+%   BinEvents = binary matrix of activity for each cell used to create
+%       adjaceny matrices
+%   coords = coordinates of nodes
+%   edge_thresh = minimum threshold for adjacency matrix
+%   threshMax = maximum threshold for adjacency matrix 
+%   type:
+%       = 'maxvar': maximum colour variation 
+%       = 'compare': sets colour scale to fixed values (scnode, scdist)
+%       = 'modshow': node colours represent modularity groups and edge
+%           colours represent within or between group connections
+%   edgy:
+%       = 'on': edge colour represents within or between modularity group
+%           connections
+%       = 'off': edge colour represents physical distance between nodes.
+%           Overridden if type = 'modshow'
+%   scnode = fixed node colour scale max value. Recommended set to 0.5
+%   scdist = fixed edge colour scale max value. Recommended set to 130
+%   prethresh:
+%       = 'on' to threshold adjacency matrix before finding modularity
+%           groups
+%       = 'off' to not threshold adjacency matrix
+%
+% OUTPUTS:
+%   F1 = figure generated
+%
+% REQUIRED FUNCTIONS:
+%   getAdjM_CaPop (RC Feord)
+%   modularity_und (Brain connectivity toolbox)
+%   customcolormap (open source)
+%   distinguishable_colors (open source)
+%
+% NOTES:
+%   Recommended settings:
+%       scnode = 0.5 (for normalised modularity)
+%       scdist = 130 (for internode distance)
+%       prethresh = 'off'
+
+
+%% Find modularity
+fs = str2double(Info.FrRate)/1000;
+method = 'tileCoef';
+downSample = 0;
+lag = 1; 
+
+adjM = getAdjM_CaPop(BinEvents, method, downSample, fs, lag);
+
+adjM(adjM<0) = 0;
+adjM(isnan(adjM)) = 0;
+adjM = adjM .* ~eye(size(adjM));
+
+if strcmp(prethresh,'on')
+    adjM(adjM < edge_thresh) = 0;
+    adjM(adjM > threshMax) = 0;
+end
+
+[Ci,~]=modularity_und(adjM);
+[~,CiSort] = sort(Ci);
+BinEventCiSort = BinEvents(:,CiSort);
+
+spikes = BinEventCiSort;
+adjMmod = getAdjM_CaPop(spikes, method, downSample, lag, fs);
+adjMmod(adjMmod<0) = 0;
+adjMmod(isnan(adjMmod)) = 0;
+adjMmod = adjMmod .* ~eye(size(adjMmod));
+
+adjMmod(adjMmod < edge_thresh) = 0;
+adjMmod(adjMmod > threshMax) = 0;
+
+% Resort coords
+coordsold = coords;
+coords = zeros(2,length(adjMmod));
+coords = coordsold(:,CiSort);
+
+%% Find variables which will change network plot
+% Node degree
+deg = sum(double(adjMmod~=0));
+
+% Straight line distance between nodes
+distn = NaN(size(adjMmod));
+for i = 1:length(adjMmod)
+    coordi = coords(:,i);
+    for j = 1:length(adjMmod)
+        if adjMmod(i,j) ~= 0
+            coordj = coords(:,j);
+            dx = (coordj(1) - coordi(1)) ^2; 
+            dy = (coordj(2) - coordi(2)) ^2;
+            dist = sqrt(dx + dy); % Pythagoras
+            distn(i,j) = dist;
+        end
+    end
+end
+
+% Rank distance
+distns = triu(distn);
+distns = distns(distns > 0);
+unq = unique(sort(distns));
+unq(isnan(unq)) = [];
+ranke = zeros(length(unq));
+for i = 1:length(unq)
+    [val] = find(distn == unq(i));
+    ranke(1:numel(val),i) = val;
+    clear val
+end
+ranke = ranke(any(ranke,2),:); % Remove additional rows
+
+% Betweenness centrality
+% Normalised for compatibility with type 'comparison'
+BC = betweenness_wei(adjMmod);
+BC = BC/((length(adjMmod)-1)*(length(adjMmod)-2));
+unq = unique(sort(BC)); 
+rankn = zeros(size(unq));
+for i = 1:length(unq)
+    [val] = find(BC == unq(i));
+    rankn(1:numel(val),i) = val;
+    clear val
+end
+rankn = rankn(any(rankn,2),:);
+
+%% Generate colours 
+colorend = [0 0 0.5]; % deep blue
+colorstart = [1 1 0]; % yellow
+mycolormap = customcolormap([0 0.5 1],[0 0 0.5; 0.5 0.5 0.25; 1 1 0]);
+
+if strcmp(type,'maxvar')
+    if strcmp(edgy,'on')
+        numcoloredge = numel(unique(Ci));
+    else
+        numcoloredge = size(ranke,2);
+    end
+    numcolornode = size(rankn,2);   
+elseif strcmp(type,'compare')
+    if strcmp(edgy,'on')
+        numcoloredge = numel(unique(Ci));
+    else     
+        numcoloredge = scdist;
+    end
+    numcolornode = 100;
+elseif strcmp(type,'modshow')
+    numcolornode = numel(unique(Ci));
+end
+
+% Node colors
+if strcmp(type,'compare') || strcmp(type,'maxvar')
+    rvaln = linspace(colorstart(1), colorend(1), numcolornode);
+    gvaln = linspace(colorstart(2), colorend(2), numcolornode);
+    bvaln = linspace(colorstart(3), colorend(3), numcolornode);
+    wn = [rvaln(:), gvaln(:), bvaln(:)];
+elseif strcmp(type,'modshow')
+    wn = distinguishable_colors(numcolornode);
+end
+
+% Edge colors
+if (strcmp(type,'compare') || strcmp(type,'maxvar')) && strcmp(edgy,'off')
+    rvale = linspace(colorstart(1), colorend(1), numcoloredge);
+    gvale = linspace(colorstart(2), colorend(2), numcoloredge);
+    bvale = linspace(colorstart(3), colorend(3), numcoloredge);
+    we = [rvale(:), gvale(:), bvale(:)];
+end
+
+% MOD GP colours
+wmod = distinguishable_colors(numel(unique(Ci)));
+
+%% Plot
+F1 = figure;
+F1.OuterPosition = [50   100   800  700];
+set(F1,'WindowStyle','normal');
+aesthetics; axis off; hold on
+
+%% Add edges
+max_ew = 2;
+min_ew = 0;
+adjMc = triu(adjMmod); % Decreases run time
+adjMcl = adjMc;
+adjMc = rescale(adjMc,min_ew,max_ew);
+Cic = sort(Ci);
+
+t = linspace(-pi,pi,length(adjMmod) + 1).';
+
+for elecA = 1:length(adjMc)
+    for elecB = 1:length(adjMc)
+        if adjMc(elecA,elecB) > 0
+            u  = [cos(t(elecA));sin(t(elecA))];
+            v  = [cos(t(elecB));sin(t(elecB))];
+            if round(u(1),3) == 0
+                if cos(t(elecA-1))>0
+                    u(1) = 0.001;
+                elseif cos(t(elecA-1))<0
+                    u(1) = -0.001;
+                end
+            end
+            if round(v(1),3) == 0
+                if cos(t(elecB-1))>0
+                    v(1) = 0.001;
+                elseif cos(t(elecB-1))<0
+                    v(1) = -0.001;
+                end
+            end
+            
+            x0 = -(u(2)-v(2))/(u(1)*v(2)-u(2)*v(1));
+            y0 =  (u(1)-v(1))/(u(1)*v(2)-u(2)*v(1));
+            r  = sqrt(x0^2 + y0^2 - 1);
+            thetaLim(1) = atan2(u(2)-y0,u(1)-x0);
+            thetaLim(2) = atan2(v(2)-y0,v(1)-x0);
+            
+            if u(1) >= 0 && v(1) >= 0
+                % ensure the arc is within the unit disk
+                theta = [linspace(max(thetaLim),pi,50),...
+                    linspace(-pi,min(thetaLim),50)].';
+            else
+                theta = linspace(thetaLim(1),thetaLim(2)).';
+            end
+            
+            if strcmp(type,'maxvar') && strcmp(edgy,'off')
+                [~,rra] = find(ranke == sub2ind([length(adjMc) length(adjMc)],elecA,elecB));
+                colourr = we(rra,:);
+            elseif strcmp(type,'compare') && strcmp(edgy,'off')
+                colourr = we(ceil((distn(elecA,elecB) / scdist) * length(we)),:);
+            elseif strcmp(type,'modshow') || strcmp(edgy,'on')
+                try
+                    if Cic(elecA) == Cic(elecB)
+                        colourr = 'k';
+                    else
+                        colourr = [ 0.9100 0.4100 0.1700];
+                    end
+                catch
+                    colourr = [ 0.9100 0.4100 0.1700];
+                end
+            end
+            
+            ins = linspace(0,pi);
+            sinchn = sin(ins);
+            sinchn = rescale(sinchn,0,0.3);
+            
+            if round(abs(u(1)) - abs(v(1)),3) == 0 && round(u(2) + v(2),3) == 0 % If vertical to each other
+                if u(1) < 0
+                    xax = linspace(u(1),v(1)) + sinchn;
+                else
+                    xax = linspace(u(1),v(1)) - sinchn;
+                end
+                yax = linspace(u(2),v(2));
+                plot(xax,yax,'LineWidth',...
+                adjMc(elecA,elecB),'Color',colourr);
+            elseif round(abs(u(2)) - abs(v(2)),3) == 0 && round(u(1) + v(1),3) == 0 % If horizontal to each other
+                xax = linspace(u(1),v(1));
+                if u(2) < 0
+                    yax = linspace(u(2),v(2)) + sinchn;
+                elseif u(2) > 0
+                    yax = linspace(u(2),v(2)) - sinchn;
+                end
+                plot(xax,yax,'LineWidth',...
+                adjMc(elecA,elecB),'Color',colourr);
+            else
+                plot(r*cos(theta)+x0,r*sin(theta)+y0,'LineWidth',...
+                adjMc(elecA,elecB),'Color',colourr);
+            end
+            hold on
+        end
+    end
+end
+
+%% Add nodes
+for i = 1:length(adjMmod)
+    if deg(i) > 0
+        if strcmp(type,'maxvar')
+            % BC == 0 is a ranked value so no need to correct for BC(i) == 0
+            [~,rra] = find(rankn == i);
+            colourr = wn(rra,:);
+        elseif strcmp(type,'compare')
+            if BC(i) > 0
+                colourr = wn((ceil(BC(i)/scnode * length(wn))),:);
+            elseif BC(i) == 0
+                colourr = wn(1,:);
+            end
+        elseif strcmp(type,'modshow')
+            try
+                colourr = wn(Cic(i),:);
+            catch
+                colourr = wn(end,:);
+            end
+        end
+        plot(cos(t(i)),sin(t(i)),'o','MarkerSize',deg(i)*3,'MarkerFaceColor',...
+            colourr,'LineStyle','none',...
+            'MarkerEdgeColor',colourr) ;
+    end
+end
+
+%% Add bounds
+colli = sort(unique(Ci));
+for i = 1:length(unique(Ci))
+    vec = zeros(1,numel(Cic(Cic == i)));
+    [inp,~] = find(Cic == i);
+    for j = 1:length(vec)
+        vec(j) = t(inp(j));
+    end
+    xvals = cos(vec);
+    yvals = sin(vec);
+    shifter = 0.15;
+    for j = 1:length(vec)
+        if xvals(j) < 0
+            xvals(j) = xvals(j) - (shifter * abs(xvals(j)));
+        elseif xvals(j) > 0
+            xvals(j) = xvals(j) + (shifter * abs(xvals(j)));
+        end
+        
+        if yvals(j) < 0
+            yvals(j) = yvals(j) - (shifter * abs(yvals(j)));
+        elseif yvals(j) > 0
+            yvals(j) = yvals(j) + (shifter * abs(yvals(j)));
+        end
+    end
+    plot(xvals, yvals, 'LineWidth', 3, 'Color', wmod(colli(i),:), 'MarkerFaceColor', wmod(colli(i),:), 'MarkerEdgeColor', wmod(colli(i),:));   
+    clear vec 
+end
+    
+set(gca,'color','none')
+if strcmp(type,'modshow')
+    ylim([-1.5 1.5])
+    xlim([-1.2 1.2])
+else
+    ylim([-1.7 1.7])
+    xlim auto
+end
+
+a = gca;
+xticks(1:16:128)
+yticks(1:16:128)
+xvalues = a.XTickLabels;
+yvalues = a.YTickLabels;
+% yvalues = sort(str2num(yvalues),'descend');
+a.XTickLabels = xvalues;
+a.YTickLabels = yvalues;
+a.FontSize = 14;
+
+%% Legends
+set(a, 'XAxisLocation', 'top')
+a.XAxis.FontName = 'Arial';
+a.XAxis.FontSize = 14;
+a.YAxis.FontName = 'Arial';
+a.YAxis.FontSize = 14;
+
+%% ND, EW, Edge col = mod link, Node col = mod group
+if strcmp(type,'modshow')
+    % Legend = ND, EW, EC, NC
+    % ND
+    n1 = plot(-10,-10,'o','MarkerSize',1 *3,'MarkerEdgeColor','k');
+    n2 = plot(-10,-10,'o','MarkerSize',8 *3,'MarkerEdgeColor','k');
+    n3 = plot(-10,-10,'o','MarkerSize',15 *3,'MarkerEdgeColor','k');
+    
+    % NC
+    for i = 1:length(wn)
+        eval(['n' (num2str(i+3)) convertStringsToChars("= plot(-10,-10,'o','MarkerSize',8,'MarkerEdgeColor',wn(i,:),'MarkerFaceColor',wn(i,:));")])
+    end
+    
+    % EW
+    if strcmp(type,'maxvar') || strcmp(type,'modshow')
+        % Set weight
+        copp = adjMc; % adjMc already been weighted 
+        copp = copp(:);
+        copp(copp == 0) = [];
+        Emin = min(copp,[],'all');
+        Emax = max(copp,[],'all');
+        Emid = (Emin + (Emax - Emin)) / 2;
+
+        % Set name
+        adjMcl = adjMcl(:);
+        adjMcl(adjMcl == 0) = [];
+        Eminn = min(adjMcl,[],'all');
+        Emaxx = max(adjMcl,[],'all');
+        Emidd = (Eminn + (Emaxx - Eminn)) / 2;
+    elseif strcmp(type,'compare')
+        % Set weight
+        Emin = min_ew;
+        if Emin == 0
+            Emin = Emin + 0.0001;
+        end
+        Emax = max_ew;
+        Emid = (Emin + (Emax - Emin)) / 2;
+
+        % Set name
+        Eminn = edge_thresh;
+        Emaxx = threshMax;
+        Emidd = (Eminn + (Emaxx - Eminn)) / 2;
+    end
+
+    e6 = plot([-10 -9],[-10 -10],'LineWidth',Emin,'Color','k');
+    e7 = plot([-10 -9],[-10 -10],'LineWidth',Emid,'Color','k');
+    e8 = plot([-10 -9],[-10 -10],'LineWidth',Emax,'Color','k');
+    
+    % EC
+    e1 = plot([-10 -9],[-10 -10],'LineWidth',Emax,'Color','k');
+    e2 = plot([-10 -9],[-10 -10],'LineWidth',Emax,'Color',[ 0.9100 0.4100 0.1700]);
+
+    MOLE1 = plot(-10,-10,'o','MarkerSize',0.000000001,'MarkerEdgeColor','w','MarkerFaceColor','w');
+
+    for i = 1:length(wn) + 3
+        nodnam{i} = ['n' num2str(i)];
+        nodval{i} = ['Mod group ' num2str(i-3)];
+    end
+
+    l1string = ["   ND 1", " ", "   ND 8", " ", " ", "   ND 15", " ", " ","Within-group connection","Between-group connection"," ", strcat("Edge Weight ", num2str(Eminn,'%.2f')),strcat("Edge Weight ", num2str(Emidd,'%.2f')), strcat("Edge Weight ", num2str(Emaxx,'%.2f'))];
+    copys = l1string(1:8);
+    for i = 1:length(wn)
+        copys{8 + i} = nodval{i + 3};
+    end
+    ftr = length(copys);
+    copys{ftr + 1} = ' ';
+    for i = 9:length(l1string)
+        copys{i + length(wn) + 1} = l1string{i};
+    end
+    l1string = copys;
+    l1string = pad(l1string);
+
+    inputt = '[n1 MOLE1 n2 MOLE1 MOLE1 n3 MOLE1 MOLE1 ';
+    for i = 1:length(wn)
+        inputt = strcat(inputt, [' ' nodnam{i+3}]);
+    end
+    inputt = strcat(inputt, ' MOLE1 e1 e2 MOLE1 e6 e7 e8]');
+
+    [l1, ~] = legend(eval(inputt),'String',l1string);
+    l1.Location = 'westoutside';
+    l1.Box = 'off';
+
+%% ND, EW, Edge col = node dist, Node col = BC
+elseif (strcmp(type,'maxvar') || strcmp(type,'compare')) && strcmp(edgy,'off')
+    % Legend
+    % ND
+    n6 = plot(-10,-10,'o','MarkerSize',1 *3,'MarkerEdgeColor','k');
+    n7 = plot(-10,-10,'o','MarkerSize',8 *3,'MarkerEdgeColor','k');
+    n8 = plot(-10,-10,'o','MarkerSize',15 *3,'MarkerEdgeColor','k');
+    
+    % EW
+    if strcmp(type,'maxvar')
+        % Set weight
+        copp = adjMc; % adjMc already been weighted 
+        copp = copp(:);
+        copp(copp == 0) = [];
+        Emin = min(copp,[],'all');
+        Emax = max(copp,[],'all');
+        Emid = (Emin + (Emax - Emin)) / 2;
+
+        % Set name
+        adjMcl = adjMcl(:);
+        adjMcl(adjMcl == 0) = [];
+        Eminn = min(adjMcl,[],'all');
+        Emaxx = max(adjMcl,[],'all');
+        Emidd = (Eminn + (Emaxx - Eminn)) / 2;
+    elseif strcmp(type,'compare') % Normalise weight between 0 and scdist
+        % Set weight
+        Emin = min_ew;
+        if Emin == 0
+            Emin = Emin + 0.0001;
+        end
+        Emax = max_ew;
+        Emid = (Emin + (Emax - Emin)) / 2;
+
+        % Set name
+        Eminn = edge_thresh;
+        Emaxx = threshMax;
+        Emidd = (Eminn + (Emaxx - Eminn)) / 2;
+    end
+
+    e6 = plot([-10 -9],[-10 -10],'LineWidth',Emin,'Color','k');
+    e7 = plot([-10 -9],[-10 -10],'LineWidth',Emid,'Color','k');
+    e8 = plot([-10 -9],[-10 -10],'LineWidth',Emax,'Color','k');
+    
+    % MOD GP
+    for i = 1:length(wmod)
+        eval(['e' (num2str(i+8)) convertStringsToChars("= plot([-10 -9],[-10 -10],'LineWidth',3,'Color',wmod(i,:));")]);
+    end
+
+    MOLE1 = plot(-10,-10,'o','MarkerSize',0.000000001,'MarkerEdgeColor','w','MarkerFaceColor','w');
+    
+    % Initial label
+    l1string = ["   ND 1", " ", "   ND 8", " ", " ", "   ND 15", " ", " ", strcat("Edge Weight ", num2str(Eminn,'%.2f')),strcat("Edge Weight ", num2str(Emidd,'%.2f')), strcat("Edge Weight ", num2str(Emaxx,'%.2f')), " "];
+    
+    % Addiitonal name
+    for i = 1:length(wmod)
+        nodnam{i} = ['e' (num2str(i+8))];
+        nodval{i} = ['Mod group ' num2str(i)];
+    end
+    
+    % Add names to string
+    bb = length(l1string);
+    for i = 1:length(wmod)
+        l1string{bb + i} = nodval{i};
+    end
+
+    inputt = '[n6 MOLE1 n7 MOLE1 MOLE1 n8 MOLE1 MOLE1 e6 e7 e8 MOLE1 ';
+    for i = 1:length(wmod)
+        inputt = strcat(inputt, [' ' nodnam{i}]);
+    end
+    inputt = strcat(inputt, ']');
+    
+    l1string = pad(l1string);
+
+    [l1, ~] = legend(eval(inputt),'String',l1string);
+    l1.Location = 'westoutside';
+    l1.Box = 'off';
+
+    % Colorbar (EC, NC)
+    hAx = gca;
+    hCB = colorbar;
+    colormap(mycolormap);
+    hCB.Location = 'eastoutside';
+    % hCB.Position(1) = hCB.Position(1) + 0.02;
+
+    hNuCBAx = axes('Position',hCB.Position,'color','none');
+    hNuCBAx.XAxis.Visible = 'off';
+
+    ax2 = axes('Position',hCB.Position,'color','none');
+    ax2.XAxis.Visible = 'off';
+    ax2.YAxisLocation = 'right';
+
+    posn = hAx.Position;
+
+    hAx.Position = posn;
+    hCB.Position = hNuCBAx.Position;
+
+    if strcmp(type,'maxvar')
+        hNuCBAx.YLim = [min(distn,[],'all') max(distn,[],'all')];
+        ax2.YLim = [min(BC,[],'all') max(BC,[],'all')];
+    elseif strcmp(type,'compare')
+        hNuCBAx.YLim = [0 scdist]; % Show distance on sclae 0 to scdist
+        ax2.YLim = [0 scnode]; % Show betweeness centrality on scale 0 to 1
+    end
+
+    ylabel(ax2,'Node colour = betweenness centrality','Rotation',90,'FontWeight','bold','FontSize',13);
+    ylabel(hNuCBAx,'Edge colour = distance between nodes','Rotation',90,'FontWeight','bold','FontSize',13);
+    hCB.Position = hNuCBAx.Position;
+    hCB.FontSize = 1e-30;
+
+    hNuCBAx.FontSize = 10;
+    ax2.FontSize = 10;
+
+%% ND, EW, Edge col = mod link, Node col = BC
+elseif (strcmp(type,'maxvar') || strcmp(type,'compare')) && strcmp(edgy,'on')
+    % Legend
+    % ND
+    n6 = plot(-10,-10,'o','MarkerSize',1 *3,'MarkerEdgeColor','k');
+    n7 = plot(-10,-10,'o','MarkerSize',8 *3,'MarkerEdgeColor','k');
+    n8 = plot(-10,-10,'o','MarkerSize',15 *3,'MarkerEdgeColor','k');
+    
+    % EW
+    if strcmp(type,'maxvar')
+        % Set weight
+        copp = adjMc; % adjMc already been weighted 
+        copp = copp(:);
+        copp(copp == 0) = [];
+        Emin = min(copp,[],'all');
+        Emax = max(copp,[],'all');
+        Emid = (Emin + (Emax - Emin)) / 2;
+
+        % Set name
+        adjMcl = adjMcl(:);
+        adjMcl(adjMcl == 0) = [];
+        Eminn = min(adjMcl,[],'all');
+        Emaxx = max(adjMcl,[],'all');
+        Emidd = (Eminn + (Emaxx - Eminn)) / 2;
+    elseif strcmp(type,'compare') % Normalise weight between 0 and scdist
+        % Set weight
+        Emin = min_ew;
+        if Emin == 0
+            Emin = Emin + 0.0001;
+        end
+        Emax = max_ew;
+        Emid = (Emin + (Emax - Emin)) / 2;
+
+        % Set name
+        Eminn = edge_thresh;
+        Emaxx = threshMax;
+        Emidd = (Eminn + (Emaxx - Eminn)) / 2;
+    end
+
+    e6 = plot([-10 -9],[-10 -10],'LineWidth',Emin,'Color','k');
+    e7 = plot([-10 -9],[-10 -10],'LineWidth',Emid,'Color','k');
+    e8 = plot([-10 -9],[-10 -10],'LineWidth',Emax,'Color','k');
+    
+    % EC
+    e1 = plot([-10 -9],[-10 -10],'LineWidth',Emax,'Color','k');
+    e2 = plot([-10 -9],[-10 -10],'LineWidth',Emax,'Color',[ 0.9100 0.4100 0.1700]);
+    
+    % MOD GP
+    for i = 1:length(wmod)
+        eval(['e' (num2str(i+8)) convertStringsToChars("= plot([-10 -9],[-10 -10],'LineWidth',3,'Color',wmod(i,:));")]);
+    end
+
+    MOLE1 = plot(-10,-10,'o','MarkerSize',0.000000001,'MarkerEdgeColor','w','MarkerFaceColor','w');
+
+    l1string = ["   ND 1", " ", "   ND 8", " ", " ", "   ND 15", " ", " ", strcat("Edge Weight ", num2str(Eminn,'%.2f')),strcat("Edge Weight ", num2str(Emidd,'%.2f')), strcat("Edge Weight ", num2str(Emaxx,'%.2f'))," ","Within-group connection","Between-group connection"," "];
+    
+    % Addiitonal name
+    for i = 1:length(wmod)
+        nodnam{i} = ['e' (num2str(i+8))];
+        nodval{i} = ['Mod group ' num2str(i)];
+    end
+    
+    % Add names to string
+    bb = length(l1string);
+    for i = 1:length(wmod)
+        l1string{bb + i} = nodval{i};
+    end
+
+    inputt = '[n6 MOLE1 n7 MOLE1 MOLE1 n8 MOLE1 MOLE1 e6 e7 e8 MOLE1 e1 e2 MOLE1 ';
+    for i = 1:length(wmod)
+        inputt = strcat(inputt, [' ' nodnam{i}]);
+    end
+    inputt = strcat(inputt, ']');
+    
+    l1string = pad(l1string);
+    
+    [l1, ~] = legend(eval(inputt),'String',l1string);
+    l1.Location = 'westoutside';
+    l1.Box = 'off';
+
+    % Colorbar NC
+    hAx = gca;
+    hCB = colorbar;
+    colormap(mycolormap);
+    hCB.Location = 'eastoutside';
+
+    ax2 = axes('Position',hCB.Position,'color','none');
+    ax2.XAxis.Visible = 'off';
+    ax2.YAxisLocation = 'right';
+
+    if strcmp(type,'maxvar')
+        ax2.YLim = [min(BC,[],'all') max(BC,[],'all')];
+    elseif strcmp(type,'compare')
+        ax2.YLim = [0 scnode]; % Show betweeness centrality on scale 0 to 1
+    end
+
+    ylabel(ax2,'Node colour = betweenness centrality','Rotation',90,'FontWeight','bold','FontSize',13)
+    hCB.FontSize = 1e-30;
+    ax2.FontSize = 10;
+end
