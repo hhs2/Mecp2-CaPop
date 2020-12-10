@@ -43,7 +43,10 @@ function F1 = plot_distBC_modularity_CaPop_v2(Info,BinEvents,coords,edge_thresh,
 %       scnode = 0.5 (for normalised modularity)
 %       scdist = 130 (for internode distance)
 %       prethresh = 'off'
+%   Nodes are somtimes large enough to intersect with modularity bounds.
+%       Try changing 'nodescale' (below) or 'shifter' (add bounds section)
 
+nodescale = 2;
 
 %% Find modularity
 fs = str2double(Info.FrRate)/1000;
@@ -171,7 +174,7 @@ wmod = distinguishable_colors(numel(unique(Ci)));
 
 %% Plot
 F1 = figure;
-F1.OuterPosition = [50   100   800  700];
+F1.OuterPosition = [50   100   900  700];
 set(F1,'WindowStyle','normal');
 aesthetics; axis off; hold on
 
@@ -238,9 +241,9 @@ for elecA = 1:length(adjMc)
             
             ins = linspace(0,pi);
             sinchn = sin(ins);
-            sinchn = rescale(sinchn,0,0.3);
             
             if round(abs(u(1)) - abs(v(1)),3) == 0 && round(u(2) + v(2),3) == 0 % If vertical to each other
+                sinchn = rescale(sinchn,0,abs(u(1))/4);
                 if u(1) < 0
                     xax = linspace(u(1),v(1)) + sinchn;
                 else
@@ -251,6 +254,7 @@ for elecA = 1:length(adjMc)
                 adjMc(elecA,elecB),'Color',colourr);
             elseif round(abs(u(2)) - abs(v(2)),3) == 0 && round(u(1) + v(1),3) == 0 % If horizontal to each other
                 xax = linspace(u(1),v(1));
+                sinchn = rescale(sinchn,0,abs(u(2))/4);
                 if u(2) < 0
                     yax = linspace(u(2),v(2)) + sinchn;
                 elseif u(2) > 0
@@ -287,7 +291,7 @@ for i = 1:length(adjMmod)
                 colourr = wn(end,:);
             end
         end
-        plot(cos(t(i)),sin(t(i)),'o','MarkerSize',deg(i)*3,'MarkerFaceColor',...
+        plot(cos(t(i)),sin(t(i)),'o','MarkerSize',deg(i)*nodescale,'MarkerFaceColor',...
             colourr,'LineStyle','none',...
             'MarkerEdgeColor',colourr) ;
     end
@@ -303,7 +307,7 @@ for i = 1:length(unique(Ci))
     end
     xvals = cos(vec);
     yvals = sin(vec);
-    shifter = 0.15;
+    shifter = 0.2;
     for j = 1:length(vec)
         if xvals(j) < 0
             xvals(j) = xvals(j) - (shifter * abs(xvals(j)));
@@ -351,9 +355,9 @@ a.YAxis.FontSize = 14;
 if strcmp(type,'modshow')
     % Legend = ND, EW, EC, NC
     % ND
-    n1 = plot(-10,-10,'o','MarkerSize',1 *3,'MarkerEdgeColor','k');
-    n2 = plot(-10,-10,'o','MarkerSize',8 *3,'MarkerEdgeColor','k');
-    n3 = plot(-10,-10,'o','MarkerSize',15 *3,'MarkerEdgeColor','k');
+    n1 = plot(-10,-10,'o','MarkerSize',1 *nodescale,'MarkerEdgeColor','k');
+    n2 = plot(-10,-10,'o','MarkerSize',8 *nodescale,'MarkerEdgeColor','k');
+    n3 = plot(-10,-10,'o','MarkerSize',15 *nodescale,'MarkerEdgeColor','k');
     
     % NC
     for i = 1:length(wn)
@@ -433,9 +437,9 @@ if strcmp(type,'modshow')
 elseif (strcmp(type,'maxvar') || strcmp(type,'compare')) && strcmp(edgy,'off')
     % Legend
     % ND
-    n6 = plot(-10,-10,'o','MarkerSize',1 *3,'MarkerEdgeColor','k');
-    n7 = plot(-10,-10,'o','MarkerSize',8 *3,'MarkerEdgeColor','k');
-    n8 = plot(-10,-10,'o','MarkerSize',15 *3,'MarkerEdgeColor','k');
+    n6 = plot(-10,-10,'o','MarkerSize',1 *nodescale,'MarkerEdgeColor','k');
+    n7 = plot(-10,-10,'o','MarkerSize',8 *nodescale,'MarkerEdgeColor','k');
+    n8 = plot(-10,-10,'o','MarkerSize',15 *nodescale,'MarkerEdgeColor','k');
     
     % EW
     if strcmp(type,'maxvar')
@@ -545,9 +549,9 @@ elseif (strcmp(type,'maxvar') || strcmp(type,'compare')) && strcmp(edgy,'off')
 elseif (strcmp(type,'maxvar') || strcmp(type,'compare')) && strcmp(edgy,'on')
     % Legend
     % ND
-    n6 = plot(-10,-10,'o','MarkerSize',1 *3,'MarkerEdgeColor','k');
-    n7 = plot(-10,-10,'o','MarkerSize',8 *3,'MarkerEdgeColor','k');
-    n8 = plot(-10,-10,'o','MarkerSize',15 *3,'MarkerEdgeColor','k');
+    n6 = plot(-10,-10,'o','MarkerSize',1 *nodescale,'MarkerEdgeColor','k');
+    n7 = plot(-10,-10,'o','MarkerSize',8 *nodescale,'MarkerEdgeColor','k');
+    n8 = plot(-10,-10,'o','MarkerSize',15 *nodescale,'MarkerEdgeColor','k');
     
     % EW
     if strcmp(type,'maxvar')
