@@ -1,0 +1,103 @@
+function [adjThresh,F1] = disparity_filter(adjM,significance,showchange)
+% H Smith, Cambridge, 2021
+% Thresholding adjacency matrix using disparity filter as defined by
+% Serrano et al., 2009
+% https://www.pnas.org/content/106/16/6483
+
+% INPUTS:
+%   adjM = unthresholded adjacency matrix (undirected)
+%   significance = threshold cutoff for significance e.g. 0.05. Values at the significance 
+%       level will not be removed (<=)
+%   showchange
+%       = 1: show original and new adjacency matrix and which elements have
+%           been removed
+%       = 0: do not show
+
+% OUTPUTS:
+%   adjThresh = thresholded adjacency matrix
+%   F1 = figure showing original and thresholded matrices
+
+% REQUIRED FUNCTIONS:
+%   aesthetics (if producing figure)
+
+%% Initial calculations
+adjThresh = adjM;
+num_nodes = length(adjM); % Number of nodes
+deg = sum(double(adjM~=0)); % Node degree
+edge_weight_total = sum(adjM,2); % Sum of edge weights
+xmin = 0; % Minimum value for integral
+
+%% Thresholding 
+for i = 1:num_nodes
+    
+    [~,connections] = find(adjM(i,:)>0); % Find connections
+    N = length(connections); % Number of connections
+    k = deg(i); % Node degree
+    fun = @(x) (1-x).^(k-2); % Function of integral
+    
+    % Fractional edge weights
+    p_all = zeros(1,N);
+    for j = 1:N
+        p_all(j) = adjM(i,connections(j)) / edge_weight_total(i);
+    end
+    
+    % Test significance
+    func_output = zeros(1,N);
+    for j = 1:N
+        xmax = p_all(j);
+        q = integral(fun,xmin,xmax);
+        func_output(j) = 1 - ((k-1)*q);
+    end
+    
+    % Apply threshold
+    for j = 1:N
+        if func_output(j) > significance
+            adjThresh(i,connections(j)) = 0;
+        end
+    end
+    
+end
+
+F1 = [];
+
+%% Show figures
+if showchange == 1
+    adjChange = adjM - adjThresh;
+    
+    p = [50 150 900 300];
+    set(0, 'DefaultFigurePosition', p)
+
+    F1 = figure;
+
+    subplot(1,3,1)
+    imagesc(adjM)
+    title('Original adjacency matrix')
+    xlabel('Nodes')
+    ylabel('Nodes')
+    c = colorbar;
+    c.Label.String = 'correlation coefficient';
+
+    subplot(1,3,2)
+    imagesc(adjThresh)
+    title('Thresholded adjacency matrix')
+    xlabel('Nodes')
+    ylabel('Nodes')
+    c = colorbar;
+    c.Label.String = 'correlation coefficient';
+
+    subplot(1,3,3)
+    imagesc(adjChange)
+    title('Removed edges')
+    xlabel('Nodes')
+    ylabel('Nodes')
+    c = colorbar;
+    c.Label.String = 'correlation coefficient';
+
+    [F1.Children(3).Limits, F1.Children(1).Limits, F1.Children(2).CLim,...
+        F1.Children(4).CLim] = deal(F1.Children(5).Limits);
+    
+    aesthetics
+    
+end
+
+end
