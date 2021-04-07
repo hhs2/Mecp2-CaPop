@@ -1,0 +1,62 @@
+function [F1] = significance_distribution_check_v3(events,adjM,repNum,tail,method,downSample,lag,fs,genotype,bins)
+% H Smith, Cambridge, 2021
+% Show changes in thresholding as number of repeats increases
+% Samples a certain number of points for speed
+
+% INPUTS:
+%   events = binary matrix of spikes/neuronal events, columns are nodes/cells,
+%            rows correspond to time points
+%   adjM = adjacency matrix of real data
+%   repNum = number of repetitions for the generation of synthetic datasets
+%   tail = confidence interval. Eg input 0.05 for p = 0.05 thresholding and
+%          0.025 for p = 0.025 thresholding. No default set
+%   method = correlation method for adjacency matrix generation: 
+%            'tileCoef' = STTC, 'correlation','partialcorr','xcorr'
+%   downSample = downsampling
+%   lag = lag for the correlation or STTC
+%   fs = sampling frequency
+%   genotype: (currently no code for het)
+%       = 0 knockout
+%       = 1 wildtype
+%   bins = number of iterations between each save of thresholding data.
+%       Recommend ~10 for repNum = 3000
+
+% OUTPUTS:
+%   F1 = figure as described in significance_distribution_plots
+
+% REQUIRED FUNCTIONS:
+%   getAdjM_CaPop
+%   significance_distribution_plots
+
+%% Load variables
+% adjMi is specifically NOT preallocated as this creates errors during 
+% the later sorting process
+num_nodes = size(events,2); % Number of nodes 
+a = 1:bins:repNum; % Sampling points
+dist1 = cell(size(a));
+
+%% Run circular data shuffling
+ploton = 0;
+[~,~,~,adjSynth] = AdjMProbabilisticThresh_v3(events,adjM,repNum,method,downSample,lag,fs,tail,ploton);
+
+%% Identify threshold values 
+dist1 = cell(1,length(a));
+for i = 1:length(a)
+    n = a(i); % Repetition number
+    cutoff_point = ceil((1 - tail) * n); % Find column no. corresponding to cutoff point
+    mat = zeros(num_nodes);
+    for cell_row = 1:num_nodes
+        for cell_column = 1:num_nodes
+            Eu = sort(adjSynth(cell_row,cell_column,1:n),'ascend'); % List of synthetic values for that element 
+            threshold = Eu(cutoff_point); % Threshold value
+            mat(cell_row,cell_column) = threshold; % Store value
+        end
+    end
+    dist1{i} = mat;
+end
+
+%% Plot
+repVal = a;
+F1 = significance_distribution_plots(dist1,repVal,adjM,genotype);
+
+end
