@@ -1,0 +1,118 @@
+function [adjThresh,F1] = lans(adjM,significance,showchange)
+% H Smith, Cambridge, 2021
+% Locally adaptive network sparsification as a method to threshold
+% adjacency matrices using nonparametric disparity filters as per Foti et
+% al, 2011.
+% https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0016431
+
+% INPUTS:
+%   adjM = adjacency matrix
+%   significance = threshold cutoff for significance e.g. 0.05. Note that
+%       the code will reverse this (take 1-significance) to follow the 
+%       (1-F) step as per Foti et al. Values at the significance level will
+%       not be removed (<=)
+%   showchange
+%       = 1: show original and new adjacency matrix and which elements have
+%           been removed
+%       = 0: do not show
+
+% OUTPUTS:
+%   adjThresh = thresholded adjacency matrix
+%   F1 = figure showing original and thresholded adjacency matrix
+
+% REQUIRED FUNCTIONS:
+%   getAdjM_CaPop
+%   aesthetics
+
+
+%% Produce adjM from raw data
+% fs = str2double(Info.FrRate)/1000;
+% method = 'tileCoef';
+% downSample = 0;
+% lag = 1; 
+% 
+% adjM = getAdjM_CaPop(BinEvents, method, downSample, fs, lag);
+% 
+% adjM(adjM<0) = 0;
+% adjM(isnan(adjM)) = 0;
+% adjM = adjM .* ~eye(size(adjM));
+
+%% Initial calculations
+adjThresh = adjM; % Copy adjacency matrix
+significance = 1 - significance;
+num_nodes = length(adjM); % Number of nodes
+edge_weight_total = sum(adjM,2); % Sum of edge weights
+
+%% Thresholding
+for i = 1:num_nodes
+    
+    [~,connections] = find(adjM(i,:)>0); % Find connections
+    N = length(connections); % Number of connections
+    
+    % Fractional edge weights
+    p_all = zeros(1,N);
+    for j = 1:N
+        p_all(j) = adjM(i,connections(j)) / edge_weight_total(i);
+    end
+    
+    % Indicator function for p(ik) <= p(ij)
+    F_all = zeros(1,N);
+    for j = 1:N
+        F_all(j) = numel(p_all(p_all<=p_all(j)));
+    end
+    
+    F_all = F_all .* (1/N);
+    F_all = 1 - F_all;
+    
+    % Apply threshold
+    for j = 1:N
+        if F_all(j) > significance
+            adjThresh(i,connections(j)) = 0;
+        end
+    end
+    
+end
+
+F1 = [];
+
+%% Show figures
+if showchange == 1
+    adjChange = adjM - adjThresh;
+    
+    p = [50 150 900 300];
+    set(0, 'DefaultFigurePosition', p)
+
+    F1 = figure;
+
+    subplot(1,3,1)
+    imagesc(adjM)
+    title('Original adjacency matrix')
+    xlabel('Nodes')
+    ylabel('Nodes')
+    c = colorbar;
+    c.Label.String = 'correlation coefficient';
+
+    subplot(1,3,2)
+    imagesc(adjThresh)
+    title('Thresholded adjacency matrix')
+    xlabel('Nodes')
+    ylabel('Nodes')
+    c = colorbar;
+    c.Label.String = 'correlation coefficient';
+
+    subplot(1,3,3)
+    imagesc(adjChange)
+    title('Removed edges')
+    xlabel('Nodes')
+    ylabel('Nodes')
+    c = colorbar;
+    c.Label.String = 'correlation coefficient';
+
+    [F1.Children(3).Limits, F1.Children(1).Limits, F1.Children(2).CLim,...
+        F1.Children(4).CLim] = deal(F1.Children(5).Limits);
+    
+    aesthetics
+end
+
+end
+    
