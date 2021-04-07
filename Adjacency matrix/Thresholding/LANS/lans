@@ -19,8 +19,7 @@ function [adjThresh,F1] = lans(adjM,significance,showchange)
 %   F1 = figure showing original and thresholded adjacency matrix
 
 % REQUIRED FUNCTIONS:
-%   getAdjM_CaPop
-%   aesthetics
+%   aesthetics (if producing figure)
 
 %% Initial calculations
 adjThresh = adjM; % Copy adjacency matrix
