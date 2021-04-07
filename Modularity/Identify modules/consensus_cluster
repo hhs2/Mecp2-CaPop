@@ -1,0 +1,61 @@
+function [M_final,Q_final,num_repeats] = consensus_cluster(adjM,threshold,repNum)
+% H Smith, Cambridge, 2020
+
+% Consensus clustering method from Lancichinetti & Fortunato, 2012, to
+% produce modularity groups from methods of community detection that can
+% produce different groups for each classifiction method.
+% https://www.nature.com/articles/srep00336
+
+% Currently runs with Community Louvain
+
+% INPUTS:
+%   adjM = adjacency matrix
+%   threshold = minimum alue for consensus coclassification matrix.
+%       Recommend values of < 0.4
+%   repNum = number of repetitions for community detection algorithm
+%       Recommend values of ~50 
+
+% OUTPUT:
+%   M_final = community affiliation vector
+%   Q_final = optimized community-structure statistic for consensus
+%       coclassification matrix
+%   num_repeats = number of iterations required to complete 
+
+% REQUIRED FUNCTIONS:
+%   consensus_coclassify (H Smith)
+%   consensuscheck (H Smith)
+%   community_louvain (Brain Connectivity Toolbox)
+
+% Run community detection repNum times 
+M = cell(repNum,1);
+M{repNum,1} = [];
+for i = 1:repNum
+    [M{i}] = community_louvain(adjM);
+end
+
+% Compute consensus coclassification matrix for M
+[D] = consensus_coclassify(M);
+D(D < threshold) = 0; % Apply threshold
+
+num_repeats = 0;
+blockdiag = 0;
+
+while blockdiag ~= 1 % Stop when D is block diagonal
+    % Run community detection on thresholded matrix
+    [B,Q] = deal(cell(repNum,1)); % Overwrite
+    for i = 1:repNum
+        [B{i},Q{i}] = community_louvain(D);
+    end
+    
+    % Calculate consensus coclassification matrix on new community
+    [D] = consensus_coclassify(B);
+    D(D < threshold) = 0;
+    
+    num_repeats = num_repeats + 1; 
+    blockdiag = consensuscheck(D); % Check if matrix is block diagonal
+end
+
+M_final = B{1};
+Q_final = Q{1};
+
+end
