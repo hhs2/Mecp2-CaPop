@@ -1,0 +1,85 @@
+function [Mout,Qout,num_repeats] = consensus_cluster_adapted(Info,BinEvents,threshold,randomRepeat,repNum)
+% H Smith, Cambridge, 2020
+% Code to find  consistent modularity grouping of single dataset despite 
+% slight variability in probabilistic thresholding 
+%
+% INPUTS:
+%   Info = used to extract frame rate from data
+%   BinEvents = binary matrix tracking event occurrence to produce
+%       correlation matrix by spike time tiling coefficient
+%   threshold = value to threshold consensus matrices.
+%       Recommended value = 0.05
+%   randomRepeat = number of times to repeat mod_consensus_cluster_iterate
+%       step. Recommended value = 10
+%   repNum = number of repeats for statistical thresholding
+%
+% OUTPUTS:
+%   Mout = final community clustering (modularity grouping) of nodes
+%   Qout = confidence in result. See community_louvain function
+%   num_repeats = number of times consensus coclassification step had to
+%       run to produce Mout, Qout. Trial dataset only required 1-2
+%       iterations however original paper expected more trials
+%
+% REQUIRED FUNCTIONS
+%   getAdjM_CaPop
+%   AdjMProbabilisticThresh_v3
+%   mod_consensus_cluster_iterate
+%   consensus_coclassify
+%   consensuscheck
+
+%% Generate adjacency matrix
+fs = str2double(Info.FrRate)/1000;
+method = 'tileCoef';
+downSample = 0;
+lag = 1; 
+
+adjM = getAdjM_CaPop(BinEvents, method, downSample, fs, lag);
+
+adjM(adjM<0) = 0;
+adjM(isnan(adjM)) = 0;
+adjM = adjM .* ~eye(size(adjM));
+
+%% Repeat stats analysis
+tail = 0.05;
+ploton = 0;
+
+% Generate << randomRepeat >> number of adjacency matrices
+for i = 1:randomRepeat
+    [adjMmod{i}] = AdjMProbabilisticThresh_v3(BinEvents,adjM,repNum,method,downSample,lag,fs,ploton,tail);
+%     fprintf('%d. Complete', i);
+end
+
+% Find modularity for each of those adjacency matrices
+for i = 1:randomRepeat
+    [M{i},~,~] = mod_consensus_cluster_iterate(adjMmod{i},threshold,50);
+%     fprintf('%d. Complete', i);
+end
+
+%% Consensus coclassification
+[D] = consensus_coclassify(M);
+D(D < threshold) = 0;
+
+num_repeats = 0;
+blockdiag = 0;
+
+while blockdiag ~= 1 % Stop when D is block diagonal
+    % Run community detection on thresholded matrix
+    B = cell(randomRepeat,1); % Overwrite
+    B{repNum,1} = [];
+    Q = B;
+    for i = 1:randomReapeat
+        [B{i},Q{i}] = community_louvain(D);
+    end
+    
+    % Calculate consensus coclassification matrix on new community
+    [D] = consensus_coclassify(B);
+    D(D < threshold) = 0;
+    
+    num_repeats = num_repeats + 1;
+    blockdiag = consensuscheck(D);
+end
+
+Mout = B{1};
+Qout = Q{1};
+
+end
