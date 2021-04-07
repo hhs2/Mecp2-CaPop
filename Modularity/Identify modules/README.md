@@ -7,3 +7,5 @@ consensus_coclassify: produce consensus matrix to determine proportion of repeat
 consensuscheck: check if consensus matrix is block diagonal. If yes, consensus clustering is finished 
 
 consensus_cluster_adapted: consensus clustering method accounting for variability in probabilistic thresholding 
+
+consensus_cluster_variable_check: runs a number of different variables to show how they affect module partitions over time
