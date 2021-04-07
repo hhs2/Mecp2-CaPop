@@ -5,3 +5,5 @@ consensus_cluster: consensus clustering method for nondeterministic community de
 consensus_coclassify: produce consensus matrix to determine proportion of repeated community partitions in which two nodes are placed into the same module
 
 consensuscheck: check if consensus matrix is block diagonal. If yes, consensus clustering is finished 
+
+consensus_cluster_adapted: consensus clustering method accounting for variability in probabilistic thresholding 
