@@ -1,0 +1,98 @@
+function F1 = consensus_cluster_variable_check(Info,BinEvents,repNum)
+% H Smith, Cambridge, 2021
+% Check how changing variables affects outcome of consensus clustering
+
+% Variables that are checked:
+%   tau = lower bound threshold for consensus classification matrix
+%   CL rep = number of iterations of CL community clustering 
+%   number of matrics = how many thresholded matrices are used
+
+% INPUTS:
+%   Info = store of information where Info.FrRate = frame recording rate
+%   BinEvents = binary events matrix used to produce adjacency matrix
+%   repNum = number of repeats of statistical theresholding. Recommended
+%       value 10 to 30 however this has a long run time
+
+% OUTPUTS:
+%   F1 = plots produced
+
+% REQUIRED FUNCTIONS:
+%   getAdjM_CaPop
+%   AdjMProbabilisticThresh_v3
+%   mod_consensus_cluster_iterate
+%   consensus_coclassify
+
+%% Generate adjacency matrix
+fs = str2double(Info.FrRate)/1000;
+method = 'tileCoef';
+downSample = 0;
+lag = 1; 
+
+adjM = getAdjM_CaPop(BinEvents, method, downSample, fs, lag);
+
+adjM(adjM<0) = 0;
+adjM(isnan(adjM)) = 0;
+adjM = adjM .* ~eye(size(adjM));
+
+%% Generate set of thresholded matrices
+adjThresh = cell(1,repNum);
+for i = 1:repNum
+    [adjThresh{i}] = AdjMProbabilisticThresh_v3(BinEvents,adjM,1500,method,downSample,lag,fs,0,0.05);
+%     fprintf('%d. Complete', i);
+end
+
+%% CL each matrix set
+% Create cell where each element is the CL modularity. 
+% Cell column = one of 1:repNum of thresholded matrices
+% Cell row = tau value used
+% Cell axis 3 = number of CL repeats
+% ie CLset{tau, matrix no., repeats}
+thresholds = [0.01 0.05 0.1 0.2 0.3 0.4]; % tau values for iterative CL
+repeats = [1 10 20 30 40 50]; % number of CL repeats
+CLset = cell(length(thresholds),repNum,length(repeats));
+
+for i = 1:repNum
+    adj = adjThresh{i}; % Select adjacency matrix
+    for j = 1:length(thresholds)
+        tau = thresholds(j); % Select tau value
+        for k = 1:length(repeats)
+            rep = repeats(k);
+            [M,~,~] = consensus_cluster(adj,tau,rep); % iterative CL modularity
+            CLset{j,i,k} = M;
+        end
+    end
+end
+
+%% Produce figure
+% Make sure to adjust ylim
+F1 = figure;
+xvals = 1:repNum;
+yvals = zeros(1,repNum);
+for t = 1:length(thresholds) % For each tau value
+    subplot(3,2,t)
+    hold on
+    for j = 1:length(repeats)
+        for i = 1:repNum % For each repeat number
+            input_cell = cell(1,i);
+            for k = 1:length(input_cell) % Collect relevant CL modules
+                input_cell{k} = CLset{t,k,j};
+            end
+            [D] = consensus_coclassify(input_cell); % Calculate initial consensus
+            Dav = mean(D,'all');
+            yvals(i) = Dav;
+        end
+        for i = 1:repNum
+            yvals(i) = mean(yvals(1:i),'all');
+        end
+        plot(xvals,yvals)
+        st = {['CL rep ' num2str(repeats(1))],['CL rep ' num2str(repeats(2))],['CL rep ' num2str(repeats(3))],['CL rep ' num2str(repeats(4))],['CL rep ' num2str(repeats(5))],['CL rep ' num2str(repeats(6))]};
+        legend('String',st,'Location','eastoutside')
+        xlim([0 repNum])
+        ylim([0.17 0.235]); % Need to adjust this 
+    end
+    xlabel('Number of adjacency matrices')
+    ylabel('Average initial consensus')
+    title(['\tau = ' num2str(thresholds(t))])
+end
+            
+end
