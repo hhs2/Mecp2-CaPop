@@ -1,0 +1,91 @@
+function F1 = heterogeneity_check(adjM,a)
+% Written by H Smith, Cambridge, 2021
+% Function to check heterogeneity of data and therefore the applicability
+% of disparity filter produced by Serrano et al., 2009.
+% https://www.pnas.org/content/106/16/6483
+
+% INPUTS:
+%   adjM = adjacency matrix (unthresholded)
+%   a = constant determining confidence interval for evaluation of null
+%       hypothesis, larger is more restrictive. Typical value in analogy to
+%       gaussian statistics a = 2 (Serrano et al., 2009)
+
+% OUTPUTS:
+%   F1 = figure showing heterogeneity of data. All data below black line is
+%       too homogenous for disparity filter to be appropriate
+
+% REQUIRED FUNCTIONS:
+%   aesthetics
+
+F1 = figure;
+hold on
+
+deg = sum(double(adjM~=0)); % Node degree
+num_nodes = length(adjM); % Number of nodes
+edge_weight_total = sum(adjM,2); % Sum of edge weights
+
+%% Assumptions for null model
+% kMax = max(deg,[],'all'); % Maximum node degree
+% xvals = 1:0.1:kMax;
+% mAssumed = zeros(size(xvals));
+% for i = 1:length(mAssumed)
+%     mAssumed(i) = xvals(i) ^ significance;
+% end
+% plot(xvals,mAssumed,'g-','LineWidth',2);
+
+%% Null models
+kMax = max(deg,[],'all'); % Maximum node degree
+xvals = 1:0.1:kMax;
+
+mNull = zeros(size(xvals));
+for i = 1:length(mNull)
+    mNull(i) = (2*xvals(i)) / (xvals(i)+1);
+end
+
+vNull = zeros(size(xvals));
+for i = 1:length(vNull)
+    k = xvals(i);
+    vNull(i) = (k^2) * (((20+(4*k))/((k+1)*(k+2)*(k+3))) - (4/((k+1)^2)));
+end
+sNull = sqrt(vNull);
+
+upsilonNull = mNull + (a .* sNull);
+
+plot(xvals,upsilonNull,'k--','LineWidth',2);
+
+%% Scatter kY
+for i = 1:num_nodes
+    
+    [~,connections] = find(adjM(i,:)>0); % Find connections
+    N = length(connections); % Number of connections
+    k = deg(i); % Node degree
+    
+    % Fractional edge weights
+    p_all = zeros(1,N);
+    for j = 1:N
+        p_all(j) = adjM(i,connections(j)) / edge_weight_total(i);
+    end
+    
+    p_all = p_all .^ 2;
+    p_all = sum(p_all,'all');
+    kY = p_all * k;
+    
+    [~,col] = find(xvals == k);
+    if kY > upsilonNull(col)
+        c = 'b';
+    else
+        c = 'r';
+    end
+    
+    scatter(k,kY,[],c,'filled')
+end
+
+% F1.Children.YLim(1) = 0;
+xlabel('Number of neighbours{\it k}','FontWeight','bold')
+ylabel('Local heterogeneity \Upsilon_{i}_ (k)','FontWeight','bold')
+legend('Lower bound of model applicability')
+title("Local Heterogeneity of Edges' Weight",'FontWeight','bold')
+
+aesthetics
+
+end
