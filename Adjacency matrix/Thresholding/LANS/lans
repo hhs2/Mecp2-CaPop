@@ -6,10 +6,8 @@ function [adjThresh,F1] = lans(adjM,significance,showchange)
 % https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0016431
 
 % INPUTS:
-%   adjM = adjacency matrix
-%   significance = threshold cutoff for significance e.g. 0.05. Note that
-%       the code will reverse this (take 1-significance) to follow the 
-%       (1-F) step as per Foti et al. Values at the significance level will
+%   adjM = unthresholded adjacency matrix (undirected)
+%   significance = threshold cutoff for significance e.g. 0.05. Values at the significance level will
 %       not be removed (<=)
 %   showchange
 %       = 1: show original and new adjacency matrix and which elements have
@@ -24,22 +22,8 @@ function [adjThresh,F1] = lans(adjM,significance,showchange)
 %   getAdjM_CaPop
 %   aesthetics
 
-
-%% Produce adjM from raw data
-% fs = str2double(Info.FrRate)/1000;
-% method = 'tileCoef';
-% downSample = 0;
-% lag = 1; 
-% 
-% adjM = getAdjM_CaPop(BinEvents, method, downSample, fs, lag);
-% 
-% adjM(adjM<0) = 0;
-% adjM(isnan(adjM)) = 0;
-% adjM = adjM .* ~eye(size(adjM));
-
 %% Initial calculations
 adjThresh = adjM; % Copy adjacency matrix
-significance = 1 - significance;
 num_nodes = length(adjM); % Number of nodes
 edge_weight_total = sum(adjM,2); % Sum of edge weights
 
