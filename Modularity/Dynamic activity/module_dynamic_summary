@@ -1,0 +1,107 @@
+function F1 = module_dynamic_summary(adjT,M,transfer_module,transfer_time,c)
+% H Smith, Cambridge, March 2021
+% Summarise dynamic module activity
+% Figure size has not been set. Set figure position by changing value 3 and
+%   4 in F1.Position
+
+% INPUTS:
+%   adjT = adjacency matrix (threshold before input as required)
+%   M = 1 by n vector with assigned module for each node n
+%   transfer_module = cell with module i having vector transfer_module{i}
+%       containing list of other modules that i communicates with
+%   transfer_time = cell where transfer_time{i}(j) is time between activity
+%       from module i to transfer_module{i}(j)
+%   c = colour 
+
+% OUTPUTS:
+%   F1 = summary of dynamic module activity
+
+% REQUIRED FUNCTIONS:
+%   aesthetics
+
+num_modules = numel(unique(M)); % Number of modules
+
+%% Calculations - note matrices are NOT symmetrical (row --> column)
+% Connection proportion
+con_prop = zeros(num_modules);
+for i = 1:num_modules
+    for j = 1:num_modules
+        n = numel(transfer_module{i}(transfer_module{i} == j));
+        con_prop(i,j) = n / length(transfer_module{i});
+    end
+end
+
+% Average connection time
+con_time = zeros(num_modules);
+for i = 1:num_modules
+    for j = 1:num_modules
+        [f] = find(transfer_module{i} == j);
+        con = transfer_time{i}(f);
+        con_time(i,j) = mean(con,'all');
+    end
+end
+
+% Line thickness proportional to number of between group connections
+line_thick = zeros(num_modules);
+for i = 1:length(adjT)
+    for j = 1:length(adjT)
+        if adjT(i,j) > 0
+            if M(i) ~= M(j)
+                line_thick(M(i),M(j)) = line_thick(M(i),M(j)) + 1;
+            end
+        end
+    end
+end
+
+% Change to make more suitable for figures. If this is changed the value
+% must also be edited in the 'plot' lines in %% Legend section
+line_thick = line_thick / 3;
+
+%% Plot
+F1 = figure; hold on
+
+x = 1:4:num_modules*4;
+h = 1:num_modules;
+for i = 1:num_modules
+    for j = 1:num_modules
+        if line_thick(i,j) == 0
+            continue
+        else
+            xvals = [x(i) x(i)+1];
+            yvals = [h(i) h(j)];
+            plot(xvals, yvals,...
+                'LineWidth',line_thick(i,j),...
+                'Color',[0.5 0.5 0.5 1]);
+            % Add text
+            xv = xvals(2)+0.2;
+            yv = yvals(2);
+            text(xv,yv,...
+                ['P = ' num2str(con_prop(i,j),'%.2f')]);
+            text(xv,yv-.2,...
+                ['T = ' num2str(con_time(i,j),'%.2f')]);
+        end
+    end
+end
+
+% Nodes
+for i = 1:numel(unique(M))
+    scatter(x(i),h(i),500,'d','MarkerFaceColor',c,'MarkerEdgeColor',[0 0 0])
+end
+
+%% Legend
+text(x(end) + 2 , num_modules,'Number of BG connections')
+plot([x(end)+2 x(end)+3], [num_modules-1 num_modules-1],'LineWidth',15/3,'Color',[0.5 0.5 0.5 1]);
+plot([x(end)+2 x(end)+3], [num_modules-1.5 num_modules-1.5],'LineWidth',30/3,'Color',[0.5 0.5 0.5 1]);
+plot([x(end)+2 x(end)+3], [num_modules-2 num_modules-2],'LineWidth',45/3,'Color',[0.5 0.5 0.5 1]);
+text(x(end)+3.5,num_modules-1,'15')
+text(x(end)+3.5,num_modules-1.5,'30')
+text(x(end)+3.5,num_modules-2,'45')
+text(x(end)+2,num_modules-3,{'P = proportion of';'total connections'})
+text(x(end)+2,num_modules-3.5,{'T = average time';'between connections (s)'})
+
+ylim([0 numel(unique(M))])
+xlim([0 x(end)+6])
+
+aesthetics
+
+end
