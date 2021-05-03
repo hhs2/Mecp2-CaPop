@@ -1,0 +1,277 @@
+function F1 = modplot_nets_v2(projectdir,Emax,highDensity)
+% H Smith, Cambridge, 2021
+% Code to assess static features of module communication
+
+% This code was built to find and extract raw data when data is stored as
+%   such:
+%   1. Info (contains string of Genotype) and coords (node 
+%       location) stored as dataset_name.mat when dataset_name
+%       contains segment 'CaPopProj'. This is how data was
+%       originally saved after extraction from slidebook
+%       Example: 170510c4fr2CaPopProj.mat; Info.Genotype
+%   2. Modularity M and thresholded adjacency matrix adjT saved in
+%       Modularity_Data.mat and adjThresh.mat respectively. .mat files
+%       saved in subfolder of projectdir named dataset_name_SavedData
+%       Example: 170510c4fr2CaPopProj_SavedData
+%   Update code as required to account for where data is stored
+
+% INPUTS:
+%   projectdir = pwd directory where raw data is stored
+%   Emax = maximum line thickness for plots
+%       Recommended value: 5
+%   highDensity = WT high density networks (determine by assessment of
+%       number of edges). Input as vector eg highDensity = [1 13 14];
+
+% OUTPUTS:
+%   F1 = figure showing high density WT (cerulean), low density WT (peach)
+%       and KO (blue) modules and the average connection strength between
+%       them. Also shows scatter of average connection strength between
+%       modules against number of conections.
+
+% REQUIRED FUNCTIONS:
+%   aesthetics (RC Feord)
+
+
+%% Initial variables
+cd(projectdir)
+identify = 'CaPopProj'; % Search for all files with CaPopProj in name
+dinfo = dir(fullfile(projectdir,['*' identify '*.mat']));
+filenames = fullfile(projectdir,{dinfo.name});
+num_files = length(filenames);
+
+Emin = 1;
+ns = 40;
+
+c_wt = [0.471 0.674 0.188]; % Wild-type (green)
+c_ko = [0.027 0.306 0.659]; % Knockout (dark blue)
+c_im = [0.9569 0.5961 0.5020]; % Immature WT (peach)
+c_mat = [0.0039 0.7490 0.7490]; % High Density WT (cerulean)
+
+%% Parse module connections
+minimumStrength = 1;
+maximumStrength = 0;
+
+[AllModuleConnections, ModuleConnectionNumber] = deal(cell(1,num_files));
+
+for f = 1:num_files
+    
+    % Extract variables
+    cd([filenames{f}(1:end-4) '_SavedData'])
+    load('Modularity_Data.mat','M'); % Modularity and Q score
+    load('AdjThresh.mat','adjT'); % Thresholded adjacency matrix
+    cd(projectdir)
+    
+    % Find between-group connections strength
+    NumberOfModules = numel(unique(M));
+    [ModuleConnections,counter] = deal(zeros(NumberOfModules));
+    for i = 1:length(adjT)
+        for j = 1:length(adjT)
+            if M(i) ~= M(j) && adjT(i,j) ~= 0
+                ModuleConnections(M(i),M(j)) = ModuleConnections(M(i),M(j)) + adjT(i,j);
+                counter(M(i),M(j)) = counter(M(i),M(j)) + 1;
+            end
+        end
+    end
+    
+    ModuleConnections = triu(ModuleConnections ./ counter);
+    ModuleConnections(isnan(ModuleConnections)) = 0;
+    AllModuleConnections{f} = ModuleConnections;
+    
+    counter = triu(counter);
+    ModuleConnectionNumber{f} = counter;
+    
+    % Update minimum and maximum connection strength
+    if min(ModuleConnections(ModuleConnections > 0),[],'all') < minimumStrength
+        minimumStrength = min(ModuleConnections(ModuleConnections > 0),[],'all');
+    end
+    if max(ModuleConnections(ModuleConnections > 0),[],'all') > maximumStrength
+        maximumStrength = max(ModuleConnections(ModuleConnections > 0),[],'all');
+    end
+end
+
+%% Edge weight space 
+strengthlist = linspace(minimumStrength,maximumStrength,1000);
+weightlist = linspace(Emin,Emax,1000);
+
+%% Figure sections
+% This determines the shape of the figure and how many subplots are needed
+A = zeros(6,num_files);
+for i = 1:num_files + 1
+    A(i) = i;
+end
+A = A';
+A = A(~all(A == 0, 2),:);
+net_rows = size(A,1) + 1;
+net_cols = size(A,2);
+
+F1 = figure;
+axMain = subplot(net_rows,net_cols,1:net_cols);
+for i = 1:num_files+1
+    eval(['ax' num2str(i) '= subplot(net_rows,net_cols,net_cols+i);']);
+end
+
+%% Plot 
+for f = 1:num_files
+    
+    load(filenames{f},'Info'); % Genotype
+    cd([filenames{f}(1:end-4) '_SavedData'])
+    load('Modularity_Data.mat','Q'); % Modularity and Q score
+    cd(projectdir)
+    ModuleConnections = AllModuleConnections{f};
+    NumberOfConnections = ModuleConnectionNumber{f};
+    
+    ModuleConnections_copy = ModuleConnections(:);
+    ModuleConnections_copy(ModuleConnections_copy == 0) = [];
+    NumberOfConnections_copy = NumberOfConnections(:);
+    NumberOfConnections_copy(NumberOfConnections_copy == 0) = [];
+    
+    % Select colours and shapes
+    if strcmp(Info.Genotype,'WT')
+        if ismember(f,highDensity)
+            c = c_mat;
+        else
+            c = c_im;
+        end
+        shape = 'o';
+    elseif strcmp(Info.Genotype,'KO')
+        c = c_ko; % dark blue
+        shape = 'd';
+    end
+
+    % Main axes
+    axes(axMain)
+    scatter(NumberOfConnections_copy,ModuleConnections_copy,ns,'filled',shape,'MarkerFaceColor',c,'MarkerEdgeColor','k')
+    hold on
+    
+    % Net
+    eval(['axes(ax' num2str(f) ')'])
+    aesthetics; axis off; hold on
+    
+    % Edges
+    t = linspace(-pi,pi,length(ModuleConnections) + 1).';
+    
+    for Module1 = 1:length(ModuleConnections)
+        for Module2 = 1:length(ModuleConnections)
+            if ModuleConnections(Module1,Module2) > 0
+                u  = [cos(t(Module1));sin(t(Module1))];
+                v  = [cos(t(Module2));sin(t(Module2))];
+                if round(u(1),3) == 0
+                    if cos(t(Module1-1))>0
+                        u(1) = 0.001;
+                    elseif cos(t(Module1-1))<0
+                        u(1) = -0.001;
+                    end
+                end
+                if round(v(1),3) == 0
+                    if cos(t(Module2-1))>0
+                        v(1) = 0.001;
+                    elseif cos(t(Module2-1))<0
+                        v(1) = -0.001;
+                    end
+                end
+
+                x0 = -(u(2)-v(2))/(u(1)*v(2)-u(2)*v(1));
+                y0 =  (u(1)-v(1))/(u(1)*v(2)-u(2)*v(1));
+                r  = sqrt(x0^2 + y0^2 - 1);
+                thetaLim(1) = atan2(u(2)-y0,u(1)-x0);
+                thetaLim(2) = atan2(v(2)-y0,v(1)-x0);
+
+                if u(1) >= 0 && v(1) >= 0
+                    % ensure the arc is within the unit disk
+                    theta = [linspace(max(thetaLim),pi,50),...
+                        linspace(-pi,min(thetaLim),50)].';
+                else
+                    theta = linspace(thetaLim(1),thetaLim(2)).';
+                end
+
+                colourr = 'k';
+
+                ins = linspace(0,pi);
+                sinchn = sin(ins);
+                
+                [~,closestIndex] = min(abs(strengthlist - ModuleConnections(Module1,Module2)));
+                weight = weightlist(closestIndex);
+                
+                if round(abs(u(1)) - abs(v(1)),3) == 0 && round(u(2) + v(2),3) == 0 % If vertical to each other
+                    sinchn = rescale(sinchn,0,abs(u(1))/4);
+                    if u(1) < 0
+                        xax = linspace(u(1),v(1)) + sinchn;
+                    else
+                        xax = linspace(u(1),v(1)) - sinchn;
+                    end
+                    yax = linspace(u(2),v(2));
+                    plot(xax,yax,'LineWidth',...
+                    weight,'Color',colourr);
+                elseif round(abs(u(2)) - abs(v(2)),3) == 0 && round(u(1) + v(1),3) == 0 % If horizontal to each other
+                    xax = linspace(u(1),v(1));
+                    sinchn = rescale(sinchn,0,abs(u(2))/4);
+                    if u(2) < 0
+                        yax = linspace(u(2),v(2)) + sinchn;
+                    elseif u(2) > 0
+                        yax = linspace(u(2),v(2)) - sinchn;
+                    end
+                    plot(xax,yax,'LineWidth',...
+                    weight,'Color',colourr);
+                else
+                    plot(r*cos(theta)+x0,r*sin(theta)+y0,'LineWidth',...
+                    weight,'Color',colourr);
+                end
+                hold on
+            end
+        end
+    end    
+    
+    % Nodes
+    str = string(1:length(ModuleConnections));
+    for i = 1:length(ModuleConnections)
+        plot(cos(t(i)),sin(t(i)),'o','MarkerSize',20,'MarkerFaceColor',...
+            c,'LineStyle','none',...
+            'MarkerEdgeColor','k') ;
+        textscatter(cos(t(i)),sin(t(i)),str(i));
+    end
+    
+    eval(['ax' num2str(f) '.YLim(2) = 1.5;'])
+    title(['Q = ' num2str(Q,'%.3f')]) 
+end
+
+%% Plot legend
+eval(['axes(ax' num2str(num_files+1) ')'])
+hold on
+xax = xlim;
+yax = ylim;
+
+Emid = (Emin + Emax) / 2;
+
+Smax = num2str(strengthlist(end),'%.3f');
+Smin = num2str(strengthlist(1),'%.3f');
+Smid = num2str((str2double(Smax)+str2double(Smin))/2,'%.3f');
+
+e1 = plot([-10 -9],[-10 -10],'LineWidth',Emin,'Color','k');
+e2 = plot([-10 -9],[-10 -10],'LineWidth',Emid,'Color','k');
+e3 = plot([-10 -9],[-10 -10],'LineWidth',Emax,'Color','k');
+
+set(gca,'xlim',xax)
+set(gca,'ylim',yax)
+
+inputt = [e1, e2, e3];
+l = string({Smin;Smid;Smax});
+l = pad(l);
+leg_str = [l{1}; l{2}; l{3}];
+[l1, ~] = legend(inputt,'String',leg_str);
+l1.FontSize = 14;
+l1.Location = 'best';
+l1.Box = 'off';
+% l1.Position(1) = 0.5;
+% l1.Position(2) = 0.5;
+
+aesthetics; axis off
+
+axMain.XLabel.String = 'Number of connections used';
+axMain.YLabel.String = 'Average strength';
+axMain.Title.String = 'Breakdown of between-group connections';
+
+% set(findall(gcf,'-property','FontSize'),'FontSize',10)
+% set(findall(gcf,'-property','FontWeight'),'FontWeight','normal')
+% set(findall(gcf,'-property','FontName'),'FontName','Montserrat')
+
+end
