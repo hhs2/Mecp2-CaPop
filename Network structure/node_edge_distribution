@@ -1,0 +1,179 @@
+function [F1,F2] = node_edge_distribution(projectdir)
+% H Smith, Cambridge, 2021
+% Plot the distribution of nodes and edges for multiple networks
+% Use this code to identify 'high density' vs 'low density' WT networks
+% based on number of edges
+
+% This code was built to find and extract raw data when data is stored as
+%   such:
+%   1. Info (contains string of Genotype) and coords (node 
+%       location) stored as dataset_name.mat when dataset_name
+%       contains segment 'CaPopProj'. This is how data was
+%       originally saved after extraction from slidebook
+%       Example: 170510c4fr2CaPopProj.mat; Info.Genotype
+%   2. Modularity M and thresholded adjacency matrix adjT saved in
+%       Modularity_Data.mat and adjThresh.mat respectively. .mat files
+%       saved in subfolder of projectdir named dataset_name_SavedData
+%       Example: 170510c4fr2CaPopProj_SavedData
+%   Update code as required to account for where data is stored
+
+% WT networks are plotted as green circles
+% KO networks are plotted as blue diamonds 
+
+% INPUTS:
+%   projectdir = pwd directory where raw data is stored
+
+% OUTPUTS:
+%   F1, F2 = figures showing breakdown of WT vs KO networks
+
+% REQUIRED FUNCTIONS:
+%   bestfitline_HS
+%   aesthetics
+
+% NOTES:
+%   2021.05.05 DIV 40-45 CaPop data considers high-density WT networks to
+%   be > 300 edges 
+
+
+%% Initialise variables 
+cd(projectdir)
+identify = 'CaPopProj'; % Search for all files with CaPopProj in name
+dinfo = dir(fullfile(projectdir,['*' identify '*.mat']));
+filenames = fullfile(projectdir,{dinfo.name});
+num_files = length(filenames);
+
+c_wt = [0.471 0.674 0.188]; % green
+c_ko = [0.027 0.306 0.659]; % dark blue
+
+[N_WT,N_KO,C_WT,C_KO,B_WT,B_KO,W_WT,W_KO,C_ALL] = deal([]);
+
+%% Identify variables 
+for i = 1:num_files
+    
+    load(filenames{i},'Info'); % Load Info variable
+    cd([filenames{i}(1:end-4) '_SavedData']) % Navigate to saved data file
+    load('adjThresh.mat','adjT') % Load adjacency matrix
+    load('Modularity_Data.mat','M') % Load modularity
+    cd(projectdir) % Return to pwd
+    
+    adjC = triu(adjT); % Copy adjacency matrix and remove repeated 1/2
+    
+    numberNodes = length(adjC); % Number of nodes
+    numberEdges = numel(adjC(adjC > 0)); % Number of edges 
+    
+    [numberBetween,numberWithin] = deal(0);
+    for j = 1:length(adjC)
+        for k = 1:length(adjC)
+            if adjC(j,k) ~= 0 % If an edge exists
+                if M(j) == M(k) % If within-group edge
+                    numberWithin = numberWithin + 1;
+                elseif M(j) ~= M(k) % If between-group edge
+                    numberBetween = numberBetween + 1;
+                end
+            end
+        end
+    end
+    
+    C_ALL = [C_ALL numberEdges];
+    
+    if strcmp(Info.Genotype,'WT')
+        N_WT = [N_WT numberNodes];
+        C_WT = [C_WT numberEdges];
+        B_WT = [B_WT numberBetween];
+        W_WT = [W_WT numberWithin];
+    elseif strcmp(Info.Genotype,'KO')
+        N_KO = [N_KO numberNodes];
+        C_KO = [C_KO numberEdges];
+        B_KO = [B_KO numberBetween];
+        W_KO = [W_KO numberWithin];
+    end
+end
+
+%% F1: plot edges against nodes 
+F1 = figure;
+ns = 50;
+
+ax1 = subplot(1,3,1); hold on
+scatter(N_WT,C_WT,ns,'o','MarkerFaceColor',c_wt,'MarkerEdgeColor',c_wt)
+scatter(N_KO,C_KO,ns,'d','MarkerFaceColor',c_ko,'MarkerEdgeColor',c_ko)
+xlabel('No. Nodes')
+ylabel('No. Edges')
+title('All edges')
+
+ax2 = subplot(1,3,2); hold on
+scatter(N_WT,B_WT,ns,'o','MarkerFaceColor',c_wt,'MarkerEdgeColor',c_wt)
+scatter(N_KO,B_KO,ns,'d','MarkerFaceColor',c_ko,'MarkerEdgeColor',c_ko)
+ylabel('No. Between-group')
+xlabel('No. Nodes')
+title('Between-group edges') 
+
+ax3 = subplot(1,3,3); hold on
+scatter(N_WT,W_WT,ns,'o','MarkerFaceColor',c_wt,'MarkerEdgeColor',c_wt)
+scatter(N_KO,W_KO,ns,'d','MarkerFaceColor',c_ko,'MarkerEdgeColor',c_ko)
+ylabel('No. Within-group')
+xlabel('No. Nodes')
+title('Within-group edges')
+
+aesthetics
+linkaxes([ax1 ax2 ax3],'xy')
+
+% Modify plots
+% sgtitle('KO networks are smaller')
+% set(findall(gcf,'-property','FontName'),'FontName','Montserrat')
+% F1.Children(2).YAxis.Limits(1) = 0;
+% F1.Children(2).XAxis.Limits(1) = F1.Children(2).XAxis.Limits(1) - 5;
+% for i = 2:4
+%     F1.Children(i).Title.FontWeight = 'Normal';
+% end
+
+%% F2: Other network features
+% Proportion of edges assigned to within group
+pW_WT = W_WT ./ (B_WT + W_WT);
+pW_KO = W_KO ./ (B_KO + W_KO);
+
+F2 = figure;
+ns = 70;
+
+subplot(1,3,1); hold on
+scatter(N_WT,C_WT,ns,'o','MarkerFaceColor',c_wt,'MarkerEdgeColor','k')
+scatter(N_KO,C_KO,ns,'d','MarkerFaceColor',c_ko,'MarkerEdgeColor','k')
+xlabel('No. Nodes')
+ylabel('No. Edges')
+
+subplot(1,3,2); hold on
+scatter(N_WT,pW_WT,ns,'o','MarkerFaceColor',c_wt,'MarkerEdgeColor','k')
+scatter(N_KO,pW_KO,ns,'d','MarkerFaceColor',c_ko,'MarkerEdgeColor','k')
+xlabel('No. Nodes')
+ylabel('Within-group edges as proportion of total')
+
+subplot(1,3,3); hold on
+scatter(B_WT,W_WT,ns,'o','MarkerFaceColor',c_wt,'MarkerEdgeColor','k')
+scatter(B_KO,W_KO,ns,'d','MarkerFaceColor',c_ko,'MarkerEdgeColor','k')
+b = [B_WT B_KO];
+w = [W_WT W_KO];
+[cor,p] = pearsoncheck(b,w);
+bestfitline_HS(b,w,cor,p,'k')
+xlabel('No. Between-group edges')
+ylabel('No. Within-group edges')
+
+sgtitle('At DIV 40-45 KO networks are smaller than several WT networks')
+aesthetics
+
+% % Modify plots
+% set(findall(gcf,'-property','FontName'),'FontName','Montserrat')
+% set(findall(gcf,'-property','FontSize'),'FontSize',12)
+% % Left plot
+% F2.Children(4).YAxis.Limits = [0 450]; 
+% F2.Children(4).YAxis.TickValues = [0 100 200 300 400];
+% % Central plot
+% F2.Children(3).YAxis.Limits = [0.4 1];
+% F2.Children(3).YAxis.TickValues = [0.4 0.6 0.8 1];
+% % Right plot
+% F2.Children(2).XAxis.Limits = [0 200];
+% F2.Children(2).YAxis.Limits = [0 250];
+% F2.Children(2).YAxis.TickValues = [0 50 100 150 200 250];
+% % Shape
+% F2.Position(3) = 1460;
+% F2.Position(4) = 420;
+
+end        
