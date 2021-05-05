@@ -1,0 +1,53 @@
+function bestfitline_HS(X,Y,cor,p,cl)
+% H Smith, Cambridge, 2021
+% Plot best fit line on scatter
+% Run this code while particular figure / subplot is still selected
+%   e.g. 
+%   subplot(1,2,1)
+%   scatter(X,Y)
+%   bestfitline_HS(X,Y,cor,p,cl)
+%   subplot(1,2,2)
+%   ...
+
+% INPUTS:
+%   X = x axis values on scatter
+%   Y = y axis values on scatter
+%   cor = correlation
+%   p = p value for corelation
+%   cl = colour of line
+
+% Change font with:
+% text(max(X,[],'all'),max(Y,[],'all'),[num2str(cor,'%.2f') ' ' txt],'Color','black','FontName','Montserrat');
+
+hold on
+
+if ~isnan(cor)
+    
+%     x1 = mean(X);
+%     y1 = mean(Y);
+%     xFit = linspace(0,200,1000);
+%     yFit = cor * (xFit - x1) + y1;
+    
+    coefficients = polyfit(X,Y,1);
+    xFit = linspace(0,max(X)+100,1000);
+    yFit = polyval(coefficients,xFit);
+
+    plot(xFit,yFit,'--','Color',cl,'LineWidth',2);
+
+    if p <= 0.05
+        if p <= 0.0001
+            txt = '****';
+        elseif p <= 0.001 && p > 0.0001
+            txt = '***';
+        elseif p <= 0.01 && p > 0.001
+            txt = '**';
+        elseif p <= 0.05 && p > 0.01
+            txt = '*';
+        end
+        text(max(X,[],'all'),max(Y,[],'all'),[num2str(cor,'%.2f') ' ' txt],'Color','black');
+    elseif p > 0.05
+        txt = ' ';
+        text(max(X,[],'all'),max(Y,[],'all'),[num2str(cor,'%.2f') ' ' txt],'Color','black');
+    end
+    
+end
